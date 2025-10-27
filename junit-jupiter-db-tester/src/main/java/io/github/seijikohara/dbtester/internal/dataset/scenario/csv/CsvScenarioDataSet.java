@@ -1,0 +1,130 @@
+package io.github.seijikohara.dbtester.internal.dataset.scenario.csv;
+
+import io.github.seijikohara.dbtester.exception.DataSetLoadException;
+import io.github.seijikohara.dbtester.internal.bridge.dbunit.DatabaseBridge;
+import io.github.seijikohara.dbtester.internal.dataset.Table;
+import io.github.seijikohara.dbtester.internal.dataset.scenario.ScenarioDataSet;
+import io.github.seijikohara.dbtester.internal.domain.ScenarioMarker;
+import io.github.seijikohara.dbtester.internal.domain.ScenarioName;
+import java.nio.file.Path;
+import java.util.Collection;
+import java.util.List;
+
+/**
+ * Collection-based CSV dataset with scenario filtering.
+ *
+ * <p>This class provides a framework-independent implementation of CSV dataset loading with
+ * scenario-based row filtering and table ordering. Unlike the DbUnit-based implementation in the
+ * facade package, this class uses Java Collections throughout.
+ *
+ * <h2>Features</h2>
+ *
+ * <ol>
+ *   <li><strong>Scenario Filtering:</strong> When CSV files have a scenario marker column (e.g.,
+ *       {@code #scenario}), only rows matching specified scenario names are included
+ *   <li><strong>Table Ordering:</strong> Tables are ordered using table-ordering.txt
+ *       (auto-generated if not present)
+ *   <li><strong>Collection-Based:</strong> Uses {@link List} instead of arrays for table management
+ * </ol>
+ *
+ * <h2>File Structure</h2>
+ *
+ * <p>CSV files should follow these conventions:
+ *
+ * <ul>
+ *   <li>Each CSV file represents one table (file name = table name)
+ *   <li>First row contains column headers
+ *   <li>Optional scenario marker column for filtering (e.g., {@code #scenario})
+ *   <li>Empty cells represent NULL values
+ * </ul>
+ *
+ * <h2>Table Ordering</h2>
+ *
+ * <p>If a {@code table-ordering.txt} file exists in the directory, tables are loaded in that order.
+ * Otherwise, a default ordering file is created with tables sorted alphabetically.
+ *
+ * @see ScenarioDataSet
+ * @see CsvScenarioTable
+ */
+public final class CsvScenarioDataSet extends ScenarioDataSet {
+
+  /** Helper for resolving table-ordering.txt. */
+  private static final CsvTableOrderingHelper ORDERING_HELPER = new CsvTableOrderingHelper();
+
+  /** Tables in this dataset (immutable list). */
+  private final List<Table> tables;
+
+  /**
+   * Creates a CSV scenario dataset from the specified directory without scenario filtering.
+   *
+   * <p>This constructor loads all rows from CSV files without any scenario-based filtering.
+   *
+   * @param directory the directory path containing CSV files
+   * @param scenarioMarker the scenario marker identifying the special column for scenario filtering
+   * @throws DataSetLoadException if dataset creation fails
+   */
+  public CsvScenarioDataSet(final Path directory, final ScenarioMarker scenarioMarker) {
+    this(directory, List.of(), scenarioMarker);
+  }
+
+  /**
+   * Creates a CSV scenario dataset from the specified directory with scenario filtering.
+   *
+   * <p>Only rows matching the specified scenario names will be included in the dataset.
+   *
+   * @param directory the directory path containing CSV files
+   * @param scenarioNames scenario names to filter; if empty, all rows are included
+   * @param scenarioMarker the scenario marker identifying the special column for scenario filtering
+   * @throws DataSetLoadException if dataset creation fails
+   */
+  public CsvScenarioDataSet(
+      final Path directory,
+      final Collection<ScenarioName> scenarioNames,
+      final ScenarioMarker scenarioMarker) {
+    final var orderedDirectory = ORDERING_HELPER.ensureTableOrdering(directory);
+    final var bridge = DatabaseBridge.getInstance();
+    final var dataSet = bridge.loadCsvDataSet(orderedDirectory);
+    this.tables = filterByScenario(dataSet.getTables(), scenarioNames, scenarioMarker);
+  }
+
+  @Override
+  public List<Table> getTables() {
+    return tables;
+  }
+
+  /**
+   * Filters tables by scenario, applying scenario-based row filtering to each table.
+   *
+   * @param tables the source tables from the CSV dataset
+   * @param scenarioNames the scenario names for filtering
+   * @param scenarioMarker the scenario marker identifying the special column for scenario filtering
+   * @return immutable list of scenario-filtered tables
+   */
+  private List<Table> filterByScenario(
+      final Collection<Table> tables,
+      final Collection<ScenarioName> scenarioNames,
+      final ScenarioMarker scenarioMarker) {
+    return tables.stream()
+        .map(table -> (Table) new CsvScenarioTable(table, scenarioNames, scenarioMarker))
+        .toList();
+  }
+
+  /**
+   * Helper class for CSV-specific table ordering resolution.
+   *
+   * <p>This nested class extends the framework's {@link
+   * io.github.seijikohara.dbtester.internal.dataset.TableOrderingResolver} to provide CSV file
+   * extension information for table ordering operations.
+   */
+  private static final class CsvTableOrderingHelper
+      extends io.github.seijikohara.dbtester.internal.dataset.TableOrderingResolver {
+
+    /** Creates a CSV-specific table ordering helper. */
+    CsvTableOrderingHelper() {}
+
+    @Override
+    protected String getFileExtension() {
+      return ".csv";
+    }
+  }
+}
