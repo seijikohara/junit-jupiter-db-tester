@@ -1,5 +1,8 @@
 plugins {
     `java-library`
+    `maven-publish`
+    signing
+    alias(libs.plugins.jreleaser)
     jacoco
 }
 
@@ -81,6 +84,145 @@ tasks {
         reports {
             xml.required = true
             html.required = true
+        }
+    }
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("mavenJava") {
+            from(components["java"])
+
+            pom {
+                name = "JUnit Jupiter DB Tester"
+                description = "A JUnit Jupiter extension for database testing with CSV-based test data management, built on DbUnit"
+                url = "https://github.com/seijikohara/junit-jupiter-db-tester"
+
+                licenses {
+                    license {
+                        name = "MIT License"
+                        url = "https://opensource.org/licenses/MIT"
+                    }
+                }
+
+                developers {
+                    developer {
+                        id = "seijikohara"
+                        name = "Seiji Kohara"
+                        email = "seiji.kohara@gmail.com"
+                    }
+                }
+
+                scm {
+                    connection = "scm:git:git://github.com/seijikohara/junit-jupiter-db-tester.git"
+                    developerConnection = "scm:git:ssh://github.com/seijikohara/junit-jupiter-db-tester.git"
+                    url = "https://github.com/seijikohara/junit-jupiter-db-tester"
+                }
+            }
+        }
+    }
+
+    repositories {
+        maven {
+            name = "staging"
+            url = layout.buildDirectory.dir("staging-deploy").get().asFile.toURI()
+        }
+    }
+}
+
+signing {
+    setRequired {
+        gradle.taskGraph.allTasks.any { it.name.contains("publish") }
+    }
+    // Use gpg-agent for signing
+    useGpgCmd()
+    sign(publishing.publications["mavenJava"])
+}
+
+jreleaser {
+    // Project information
+    project {
+        name = "JUnit Jupiter DB Tester"
+        description = "A JUnit Jupiter extension for database testing with CSV-based test data management"
+        authors.add("Seiji Kohara")
+        license = "MIT"
+        inceptionYear = "2025"
+        links {
+            homepage = "https://github.com/seijikohara/junit-jupiter-db-tester"
+        }
+    }
+
+    // GitHub Release configuration
+    release {
+        github {
+            // Skip tag creation - let axion-release-plugin handle it
+            skipTag = true
+            // Overwrite existing releases with the same tag
+            overwrite = true
+            // Upload release assets
+            uploadAssets = org.jreleaser.model.Active.ALWAYS
+
+            // Changelog generation using conventional commits
+            changelog {
+                formatted = org.jreleaser.model.Active.ALWAYS
+                preset = "conventional-commits"
+                format = "- {{commitShortHash}} {{commitTitle}} ({{commitAuthor}})"
+
+                // Categorize commits by type
+                categoryTitleFormat = "## {{categoryTitle}}"
+
+                // Hide certain commit types from changelog
+                hide {
+                    categories.add("build")
+                    categories.add("chore")
+                    categories.add("style")
+                    contributors.add("[bot]")
+                }
+
+                // Contributors
+                contributors {
+                    enabled = true
+                    format = "{{contributorName}}"
+                }
+            }
+        }
+    }
+
+    // Signing configuration
+    signing {
+        active = org.jreleaser.model.Active.ALWAYS
+        armored = true
+        mode = org.jreleaser.model.Signing.Mode.COMMAND
+    }
+
+    // Maven Central deployment
+    deploy {
+        maven {
+            mavenCentral {
+                create("sonatype") {
+                    active = org.jreleaser.model.Active.ALWAYS
+                    url = "https://central.sonatype.com/api/v1/publisher"
+
+                    // Apply Maven Central rules automatically
+                    // This enables: signing, checksums, sources jar, javadoc jar, pom verification
+                    applyMavenCentralRules = true
+
+                    // Staging repository
+                    stagingRepository(layout.buildDirectory.dir("staging-deploy").get().asFile.path)
+
+                    // Timeouts and retries
+                    connectTimeout = 20
+                    readTimeout = 60
+                    retryDelay = 20
+                    maxRetries = 100
+
+                    // Credentials are read from environment variables or ~/.jreleaser/config.properties:
+                    // JRELEASER_MAVENCENTRAL_SONATYPE_USERNAME
+                    // JRELEASER_MAVENCENTRAL_SONATYPE_PASSWORD
+                    // JRELEASER_GPG_PASSPHRASE (or signing.gnupg.passphrase)
+                    // JRELEASER_GITHUB_TOKEN (for GitHub Release)
+                }
+            }
         }
     }
 }

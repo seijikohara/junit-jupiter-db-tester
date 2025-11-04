@@ -5,14 +5,51 @@ import net.ltgt.gradle.errorprone.errorprone
 plugins {
     // Apply plugins to subprojects using `apply false` and then apply them explicitly in subprojects
     // This approach is required because plugins block cannot be used within subprojects/allprojects blocks
+    alias(libs.plugins.axion.release)
     alias(libs.plugins.errorprone) apply false
     alias(libs.plugins.spotless)
     // Version Catalog Update plugin for managing dependency versions
     alias(libs.plugins.version.catalog.update)
 }
 
+// Configure version management with axion-release-plugin
+scmVersion {
+    // Use semantic versioning - always use the highest version from tags
+    useHighestVersion = true
+
+    // Tag configuration
+    tag {
+        // Tag prefix (e.g., v1.0.0)
+        prefix = "v"
+        // No separator between prefix and version
+        versionSeparator = ""
+    }
+
+    // Version creator - simple semantic versioning
+    versionCreator("simple")
+
+    // Snapshot suffix for development versions
+    snapshotCreator { version, _ ->
+        "$version-SNAPSHOT"
+    }
+
+    // Repository configuration
+    repository {
+        // Push both commits and tags (not just tags)
+        pushTagsOnly = false
+    }
+
+    // Checks before release
+    checks {
+        // Allow uncommitted changes (set to true to enforce clean state)
+        uncommittedChanges = false
+        // Allow release even if not ahead of remote
+        aheadOfRemote = false
+    }
+}
+
 group = "io.github.seijikohara"
-version = "1.0.0-SNAPSHOT"
+version = scmVersion.version
 
 // Configure group and version for all projects
 allprojects {
