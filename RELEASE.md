@@ -17,6 +17,8 @@ See [PUBLISHING.md](PUBLISHING.md) for detailed setup instructions:
 - API token generation
 - GPG key setup
 - Credential configuration
+  - **Required**: `~/.gradle/gradle.properties` with `signing.gnupg.passphrase`
+  - **Required**: `~/.jreleaser/config.properties` with Maven Central and GitHub credentials
 
 ## Version Management
 
@@ -52,6 +54,7 @@ The project version is automatically derived from Git tags:
 **Step 1: Create Release Tag**
 
 ```bash
+# Create release tag (this will create v1.0.0 and push to remote)
 ./gradlew release
 # Or specify version: ./gradlew release -Prelease.version=1.0.0
 ```
@@ -72,14 +75,37 @@ The project version is automatically derived from Git tags:
 ```
 
 This will:
-- ✅ Create GitHub Release with changelog
+- ✅ Create GitHub Release with auto-generated changelog
 - ✅ Upload signed artifacts to Maven Central
-- ✅ Automatically publish to Maven Central
+- ✅ Automatically publish to Maven Central (no manual approval!)
+
+**Note**: This can take 30-45 minutes for the initial deployment validation and publishing.
 
 **Step 4: Verify Release**
 
-1. GitHub: `https://github.com/seijikohara/junit-jupiter-db-tester/releases`
-2. Maven Central: `https://central.sonatype.com/artifact/io.github.seijikohara/junit-jupiter-db-tester`
+**GitHub Release** (immediate):
+- Visit: `https://github.com/seijikohara/junit-jupiter-db-tester/releases`
+- Verify changelog and release notes
+
+**Maven Central** (10-30 minutes):
+- Check: `https://central.sonatype.com/artifact/io.github.seijikohara/junit-jupiter-db-tester`
+- Verify version, POM metadata, and signatures
+
+**Test Download**:
+```gradle
+dependencies {
+    testImplementation("io.github.seijikohara:junit-jupiter-db-tester:1.0.0")
+}
+```
+
+**Step 5: Update to Next Development Version**
+
+The version automatically becomes `1.0.1-SNAPSHOT` after the tag is created. No manual version updates needed!
+
+```bash
+./gradlew currentVersion
+# Output: Project version: 1.0.1-SNAPSHOT
+```
 
 ### Option 2: Automated Release (One Command)
 
@@ -185,9 +211,9 @@ axion-release-plugin calculates the next version based on the current tag:
 
 ```bash
 ./gradlew :junit-jupiter-db-tester:jreleaserConfig        # Show configuration
+./gradlew :junit-jupiter-db-tester:jreleaserFullRelease   # GitHub Release + Maven Central (recommended)
 ./gradlew :junit-jupiter-db-tester:jreleaserRelease       # GitHub Release only
 ./gradlew :junit-jupiter-db-tester:jreleaserDeploy        # Maven Central only
-./gradlew :junit-jupiter-db-tester:jreleaserFullRelease   # Both (recommended)
 ```
 
 ## Troubleshooting
@@ -205,11 +231,51 @@ git fetch --tags
 ./gradlew currentVersion
 ```
 
+### GPG Signing Errors
+
+**Error: "Inappropriate ioctl for device"**
+
+This error occurs when GPG cannot prompt for passphrase in non-TTY environments.
+
+**Solution**: Add GPG passphrase to `~/.gradle/gradle.properties`:
+
+```properties
+signing.gnupg.passphrase=your-gpg-passphrase
+```
+
 ### GitHub Release Failed
 
-- Verify `JRELEASER_GITHUB_TOKEN` is set
-- Check token has `repo` permissions
-- Verify repository name and owner in build configuration
+**Error: "403: Forbidden - Resource not accessible by personal access token"**
+
+This occurs when the GitHub token lacks necessary permissions for JReleaser to create releases.
+
+**Solution**: Ensure your GitHub Personal Access Token has the required permissions:
+- Token needs `contents: write` permission (or `repo` scope for classic tokens)
+- Create token at: https://github.com/settings/tokens
+- Update `JRELEASER_GITHUB_TOKEN` in `~/.jreleaser/config.properties`
+
+**Workaround** (if token permissions cannot be updated):
+Use `gh` CLI to create releases instead of `jreleaserFullRelease`:
+```bash
+# Deploy to Maven Central only
+./gradlew :junit-jupiter-db-tester:jreleaserDeploy --no-configuration-cache
+
+# Create GitHub Release manually
+gh release create v1.0.0 \
+  --title "v1.0.0" \
+  --notes-file junit-jupiter-db-tester/build/jreleaser/release/CHANGELOG.md
+```
+
+### Maven Central Deployment Timeout
+
+**Warning**: "Deployment timeout exceeded. However, the remote operation may still be successful."
+
+This is normal for initial deployments, which can take 30-45 minutes. The deployment continues in the background.
+
+**Verification**:
+1. Log in to [Central Portal](https://central.sonatype.com/publishing)
+2. Check deployment status (look for "PUBLISHED" status)
+3. Wait for Maven Central replication (additional 10-30 minutes)
 
 ### Maven Central Deployment Failed
 
@@ -239,7 +305,7 @@ For detailed troubleshooting, see [PUBLISHING.md](PUBLISHING.md).
 ./gradlew currentVersion
 # Output: Project version: 1.0.0-SNAPSHOT
 
-# 3. Create release tag
+# 3. Create release tag (automatically pushes to remote)
 ./gradlew release
 
 # 4. Build and publish to staging
