@@ -58,18 +58,23 @@ echo "test" | gpg --clearsign
 
 ### 4. Configure Credentials
 
-Create or update `~/.jreleaser/config.properties`:
+**Required**: Create or update `~/.gradle/gradle.properties`:
+
+```properties
+# GPG passphrase for Gradle signing plugin (required for non-interactive signing)
+signing.gnupg.passphrase=your-gpg-passphrase-from-step-3
+```
+
+**Required**: Create or update `~/.jreleaser/config.properties`:
 
 ```properties
 # Maven Central Portal credentials
 JRELEASER_MAVENCENTRAL_SONATYPE_USERNAME=your-username-from-step-2
 JRELEASER_MAVENCENTRAL_SONATYPE_PASSWORD=your-password-token-from-step-2
 
-# GPG passphrase
-JRELEASER_GPG_PASSPHRASE=your-gpg-passphrase-from-step-3
-
-# GitHub Personal Access Token (for creating releases)
-# Scopes needed: repo (full control of private repositories)
+# GitHub Personal Access Token (for gh CLI, optional for manual release creation)
+# Create token at: https://github.com/settings/tokens
+# Scopes needed: repo, workflow
 JRELEASER_GITHUB_TOKEN=your-github-personal-access-token
 ```
 
@@ -78,8 +83,6 @@ JRELEASER_GITHUB_TOKEN=your-github-personal-access-token
 ```bash
 export JRELEASER_MAVENCENTRAL_SONATYPE_USERNAME="your-username"
 export JRELEASER_MAVENCENTRAL_SONATYPE_PASSWORD="your-token"
-export JRELEASER_GPG_PASSPHRASE="your-passphrase"
-export JRELEASER_GITHUB_TOKEN="your-github-token"
 ```
 
 ## Publishing Process
@@ -101,14 +104,14 @@ git status
 ### Step 2: Create Release Tag
 
 ```bash
-# Create release tag (this will create v1.0.0)
+# Create release tag (this will create v1.0.0 and push to remote)
 ./gradlew release
 
 # Or specify version explicitly
 ./gradlew release -Prelease.version=1.0.0
 ```
 
-This creates and pushes a Git tag (e.g., `v1.0.0`).
+This creates a Git tag (e.g., `v1.0.0`) and automatically pushes it to the remote repository.
 
 ### Step 3: Build and Stage Artifacts
 
@@ -130,10 +133,10 @@ This generates:
 
 All artifacts are staged in `junit-jupiter-db-tester/build/staging-deploy/`
 
-### Step 4: Deploy to Maven Central
+### Step 4: Deploy to Maven Central and Create GitHub Release
 
 ```bash
-# Full release: GitHub Release + Maven Central deployment
+# Deploy to Maven Central and create GitHub Release
 ./gradlew :junit-jupiter-db-tester:jreleaserFullRelease --no-configuration-cache
 ```
 
@@ -142,6 +145,8 @@ All artifacts are staged in `junit-jupiter-db-tester/build/staging-deploy/`
 2. ✅ Uploads artifacts to Central Portal
 3. ✅ Validates artifacts (Maven Central rules)
 4. ✅ Automatically publishes to Maven Central (no manual approval!)
+
+**Note**: This can take 30-45 minutes for the initial deployment validation and publishing.
 
 **Dry run** (testing only):
 ```bash
@@ -152,7 +157,7 @@ All artifacts are staged in `junit-jupiter-db-tester/build/staging-deploy/`
 
 **GitHub Release** (immediate):
 - Visit: `https://github.com/seijikohara/junit-jupiter-db-tester/releases`
-- Verify changelog and assets
+- Verify changelog and release notes
 
 **Maven Central** (10-30 minutes):
 - Check: `https://central.sonatype.com/artifact/io.github.seijikohara/junit-jupiter-db-tester`
@@ -179,7 +184,6 @@ The version automatically becomes `1.0.1-SNAPSHOT` after the tag is created. No 
 ### Quick Release (All-in-One)
 
 ```bash
-# One command for the entire release process
 ./gradlew release \
           :junit-jupiter-db-tester:clean \
           :junit-jupiter-db-tester:build \
@@ -189,18 +193,6 @@ The version automatically becomes `1.0.1-SNAPSHOT` after the tag is created. No 
 ```
 
 ⚠️ **Recommended**: Use this only after successfully completing at least one manual release.
-
-### GitHub Release Only (No Maven Central)
-
-```bash
-./gradlew :junit-jupiter-db-tester:jreleaserRelease --no-configuration-cache
-```
-
-### Maven Central Only (No GitHub Release)
-
-```bash
-./gradlew :junit-jupiter-db-tester:jreleaserDeploy --no-configuration-cache
-```
 
 ## Available Gradle Tasks
 
@@ -224,20 +216,32 @@ The version automatically becomes `1.0.1-SNAPSHOT` after the tag is created. No 
 
 ```bash
 ./gradlew :junit-jupiter-db-tester:jreleaserConfig        # Show configuration
+./gradlew :junit-jupiter-db-tester:jreleaserFullRelease   # GitHub Release + Maven Central (recommended)
 ./gradlew :junit-jupiter-db-tester:jreleaserRelease       # GitHub Release only
 ./gradlew :junit-jupiter-db-tester:jreleaserDeploy        # Maven Central only
-./gradlew :junit-jupiter-db-tester:jreleaserFullRelease   # Both (recommended)
 ```
 
 ## Troubleshooting
 
 ### GPG Signing Errors
 
+**Error: "Inappropriate ioctl for device"**
+
+This error occurs when GPG cannot prompt for passphrase in non-TTY environments.
+
+**Solution**: Add GPG passphrase to `~/.gradle/gradle.properties`:
+
+```properties
+signing.gnupg.passphrase=your-gpg-passphrase
+```
+
+**Other GPG issues**:
+
 ```bash
 # Ensure gpg-agent is running
 gpg-agent --daemon
 
-# Test signing
+# Test signing (may fail in non-TTY environment)
 echo "test" | gpg --clearsign
 
 # List available keys
@@ -277,12 +281,39 @@ ls -la junit-jupiter-db-tester/build/staging-deploy/io/github/seijikohara/junit-
 cat junit-jupiter-db-tester/build/jreleaser/trace.log
 ```
 
+### Maven Central Deployment Timeout
+
+**Warning**: "Deployment timeout exceeded. However, the remote operation may still be successful."
+
+This is normal for initial deployments, which can take 30-45 minutes. The deployment continues in the background.
+
+**Verification**:
+1. Log in to [Central Portal](https://central.sonatype.com/publishing)
+2. Check deployment status (look for "PUBLISHED" status)
+3. Wait for Maven Central replication (additional 10-30 minutes)
+
 ### GitHub Release Creation Failed
 
-- Verify `JRELEASER_GITHUB_TOKEN` is set
-- Check token has `repo` permissions
-- Verify repository owner and name in configuration
-- Check internet connectivity
+**Error: "403: Forbidden - Resource not accessible by personal access token"**
+
+This occurs when the GitHub token lacks necessary permissions for JReleaser to create releases.
+
+**Solution**: Ensure your GitHub Personal Access Token has the required permissions:
+- Token needs `contents: write` permission (or `repo` scope for classic tokens)
+- Create token at: https://github.com/settings/tokens
+- Update `JRELEASER_GITHUB_TOKEN` in `~/.jreleaser/config.properties`
+
+**Workaround** (if token permissions cannot be updated):
+Use `gh` CLI to create releases instead of `jreleaserFullRelease`:
+```bash
+# Deploy to Maven Central only
+./gradlew :junit-jupiter-db-tester:jreleaserDeploy --no-configuration-cache
+
+# Create GitHub Release manually
+gh release create v1.0.0 \
+  --title "v1.0.0" \
+  --notes-file junit-jupiter-db-tester/build/jreleaser/release/CHANGELOG.md
+```
 
 ### Configuration Cache Issues
 
