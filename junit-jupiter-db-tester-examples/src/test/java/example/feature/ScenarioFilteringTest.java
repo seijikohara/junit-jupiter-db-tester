@@ -19,15 +19,21 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Demonstrates scenario-based testing with CSV filtering.
+ * Demonstrates scenario-based testing with CSV row filtering.
  *
- * <p>This test shows:
+ * <p>This test illustrates the scenario filtering feature that enables sharing a single CSV file
+ * across multiple test methods. Each test automatically loads only rows matching its method name
+ * from the {@code [Scenario]} marker column.
+ *
+ * <p>Features demonstrated:
  *
  * <ul>
  *   <li>Using scenario marker column for row filtering
  *   <li>Sharing a single CSV file across multiple test methods
  *   <li>Test method name as automatic scenario filter
  *   <li>Reducing CSV file duplication
+ *   <li>Maintaining related test data in one place
+ *   <li>Class-level {@code @Preparation} and {@code @Expectation} annotations
  * </ul>
  *
  * <p>CSV files contain scenario marker column that filters rows by test method name:
@@ -37,18 +43,23 @@ import org.slf4j.LoggerFactory;
  * shouldCreateActiveUser,1,alice,alice@example.com,ACTIVE
  * shouldCreateInactiveUser,1,bob,bob@example.com,INACTIVE
  * </pre>
+ *
+ * <p>This test uses class-level annotations in contrast to {@link MinimalExampleTest} which
+ * demonstrates method-level annotation usage.
  */
 @ExtendWith(DatabaseTestExtension.class)
-public final class SimpleScenarioTest {
+@Preparation
+@Expectation
+public final class ScenarioFilteringTest {
 
   /** Logger instance for test execution logging. */
-  private static final Logger logger = LoggerFactory.getLogger(SimpleScenarioTest.class);
+  private static final Logger logger = LoggerFactory.getLogger(ScenarioFilteringTest.class);
 
   /** DataSource for test database operations. */
   private static DataSource dataSource;
 
-  /** Creates SimpleScenarioTest instance. */
-  public SimpleScenarioTest() {}
+  /** Creates ScenarioFilteringTest instance. */
+  public ScenarioFilteringTest() {}
 
   /**
    * Sets up H2 in-memory database connection and schema.
@@ -58,12 +69,12 @@ public final class SimpleScenarioTest {
    */
   @BeforeAll
   static void setupDatabase(final ExtensionContext context) throws Exception {
-    logger.info("Setting up H2 in-memory database for SimpleScenarioTest");
+    logger.info("Setting up H2 in-memory database for ScenarioFilteringTest");
 
     final var testRegistry = DatabaseTestExtension.getRegistry(context);
     dataSource = createDataSource();
     testRegistry.registerDefault(dataSource);
-    executeScript(dataSource, "ddl/feature/SimpleScenarioTest.sql");
+    executeScript(dataSource, "ddl/feature/ScenarioFilteringTest.sql");
 
     logger.info("Database setup completed");
   }
@@ -75,7 +86,7 @@ public final class SimpleScenarioTest {
    */
   private static DataSource createDataSource() {
     final var dataSource = new JdbcDataSource();
-    dataSource.setURL("jdbc:h2:mem:SimpleScenarioTest;DB_CLOSE_DELAY=-1");
+    dataSource.setURL("jdbc:h2:mem:ScenarioFilteringTest;DB_CLOSE_DELAY=-1");
     dataSource.setUser("sa");
     dataSource.setPassword("");
     return dataSource;
@@ -91,7 +102,7 @@ public final class SimpleScenarioTest {
   private static void executeScript(final DataSource dataSource, final String scriptPath)
       throws Exception {
     final var resource =
-        Optional.ofNullable(SimpleScenarioTest.class.getClassLoader().getResource(scriptPath))
+        Optional.ofNullable(ScenarioFilteringTest.class.getClassLoader().getResource(scriptPath))
             .orElseThrow(
                 () -> new IllegalStateException(String.format("Script not found: %s", scriptPath)));
 
@@ -141,10 +152,10 @@ public final class SimpleScenarioTest {
    *   <li>Execution: Inserts ID=2 (charlie, ACTIVE)
    *   <li>Expectation: Verifies both records exist with ACTIVE status
    * </ul>
+   *
+   * <p>Note: {@code @Preparation} and {@code @Expectation} are applied at the class level.
    */
   @Test
-  @Preparation
-  @Expectation
   void shouldCreateActiveUser() {
     logger.info("Running scenario test: shouldCreateActiveUser");
 
@@ -170,10 +181,10 @@ public final class SimpleScenarioTest {
    *   <li>Execution: Inserts ID=2 (david, INACTIVE)
    *   <li>Expectation: Verifies both records exist with INACTIVE status
    * </ul>
+   *
+   * <p>Note: {@code @Preparation} and {@code @Expectation} are applied at the class level.
    */
   @Test
-  @Preparation
-  @Expectation
   void shouldCreateInactiveUser() {
     logger.info("Running scenario test: shouldCreateInactiveUser");
 
@@ -199,10 +210,10 @@ public final class SimpleScenarioTest {
    *   <li>Execution: Updates ID=2 status from INACTIVE to SUSPENDED
    *   <li>Expectation: Verifies ID=1 remains ACTIVE and ID=2 is SUSPENDED
    * </ul>
+   *
+   * <p>Note: {@code @Preparation} and {@code @Expectation} are applied at the class level.
    */
   @Test
-  @Preparation
-  @Expectation
   void shouldHandleMultipleUsers() {
     logger.info("Running scenario test: shouldHandleMultipleUsers");
 

@@ -1,4 +1,4 @@
--- DDL for BasicConventionTest (H2 Database)
+-- DDL for MinimalExampleTest (H2 Database)
 
 CREATE TABLE TABLE1 (
     ID INTEGER PRIMARY KEY,

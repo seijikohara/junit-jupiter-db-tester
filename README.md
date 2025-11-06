@@ -1,5 +1,7 @@
 # JUnit Jupiter DB Tester
 
+[![Maven Central](https://img.shields.io/maven-central/v/io.github.seijikohara/junit-jupiter-db-tester)](https://central.sonatype.com/artifact/io.github.seijikohara/junit-jupiter-db-tester)
+[![Test](https://github.com/seijikohara/junit-jupiter-db-tester/actions/workflows/test.yml/badge.svg)](https://github.com/seijikohara/junit-jupiter-db-tester/actions/workflows/test.yml)
 [![Java](https://img.shields.io/badge/Java-25-orange?logo=openjdk)](https://openjdk.org/)
 [![Gradle](https://img.shields.io/badge/Gradle-9-02303A?logo=gradle)](https://gradle.org/)
 [![JUnit](https://img.shields.io/badge/JUnit-6-25A162?logo=junit5)](https://junit.org/)
