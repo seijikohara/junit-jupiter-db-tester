@@ -1,4 +1,4 @@
--- DDL for SimpleScenarioTest (H2 Database)
+-- DDL for ScenarioFilteringTest (H2 Database)
 
 CREATE TABLE TABLE1 (
     ID INTEGER PRIMARY KEY,

@@ -19,35 +19,36 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Demonstrates the simplest convention-based database testing.
+ * Demonstrates the minimal convention-based database testing approach.
  *
- * <p>This test shows:
+ * <p>This test illustrates:
  *
  * <ul>
  *   <li>Automatic CSV file resolution based on test class and method names
- *   <li>Default {@code @Preparation} and {@code @Expectation} usage
+ *   <li>Method-level {@code @Preparation} and {@code @Expectation} annotations
  *   <li>Single table operations with minimal configuration
  *   <li>H2 in-memory database setup
+ *   <li>No scenario filtering
  * </ul>
  *
  * <p>CSV files are located at:
  *
  * <ul>
- *   <li>{@code src/test/resources/example/feature/BasicConventionTest/TABLE1.csv}
- *   <li>{@code src/test/resources/example/feature/BasicConventionTest/expected/TABLE1.csv}
+ *   <li>{@code src/test/resources/example/feature/MinimalExampleTest/TABLE1.csv}
+ *   <li>{@code src/test/resources/example/feature/MinimalExampleTest/expected/TABLE1.csv}
  * </ul>
  */
 @ExtendWith(DatabaseTestExtension.class)
-public final class BasicConventionTest {
+public final class MinimalExampleTest {
 
   /** Logger instance for test execution logging. */
-  private static final Logger logger = LoggerFactory.getLogger(BasicConventionTest.class);
+  private static final Logger logger = LoggerFactory.getLogger(MinimalExampleTest.class);
 
   /** DataSource for test database operations. */
   private static DataSource dataSource;
 
-  /** Creates BasicConventionTest instance. */
-  public BasicConventionTest() {}
+  /** Creates MinimalExampleTest instance. */
+  public MinimalExampleTest() {}
 
   /**
    * Sets up H2 in-memory database connection and schema.
@@ -57,12 +58,12 @@ public final class BasicConventionTest {
    */
   @BeforeAll
   static void setupDatabase(final ExtensionContext context) throws Exception {
-    logger.info("Setting up H2 in-memory database for BasicConventionTest");
+    logger.info("Setting up H2 in-memory database for MinimalExampleTest");
 
     final var testRegistry = DatabaseTestExtension.getRegistry(context);
     dataSource = createDataSource();
     testRegistry.registerDefault(dataSource);
-    executeScript(dataSource, "ddl/feature/BasicConventionTest.sql");
+    executeScript(dataSource, "ddl/feature/MinimalExampleTest.sql");
 
     logger.info("Database setup completed");
   }
@@ -74,7 +75,7 @@ public final class BasicConventionTest {
    */
   private static DataSource createDataSource() {
     final var dataSource = new JdbcDataSource();
-    dataSource.setURL("jdbc:h2:mem:BasicConventionTest;DB_CLOSE_DELAY=-1");
+    dataSource.setURL("jdbc:h2:mem:MinimalExampleTest;DB_CLOSE_DELAY=-1");
     dataSource.setUser("sa");
     dataSource.setPassword("");
     return dataSource;
@@ -90,7 +91,7 @@ public final class BasicConventionTest {
   private static void executeScript(final DataSource dataSource, final String scriptPath)
       throws Exception {
     final var resource =
-        Optional.ofNullable(BasicConventionTest.class.getClassLoader().getResource(scriptPath))
+        Optional.ofNullable(MinimalExampleTest.class.getClassLoader().getResource(scriptPath))
             .orElseThrow(
                 () -> new IllegalStateException(String.format("Script not found: %s", scriptPath)));
 
@@ -128,10 +129,10 @@ public final class BasicConventionTest {
   }
 
   /**
-   * Demonstrates the simplest convention-based test.
+   * Demonstrates the minimal convention-based test.
    *
    * <p>This test uses framework conventions to automatically resolve CSV file locations based on
-   * test class and method names, requiring no explicit configuration.
+   * test class and method names without requiring explicit configuration.
    *
    * <p>Test flow:
    *
@@ -145,7 +146,7 @@ public final class BasicConventionTest {
   @Preparation
   @Expectation
   void shouldLoadAndVerifyProductData() {
-    logger.info("Running basic convention test");
+    logger.info("Running minimal example test");
 
     executeSql("INSERT INTO TABLE1 (ID, COLUMN1, COLUMN2) VALUES (3, 'Keyboard', 79.99)");
 
