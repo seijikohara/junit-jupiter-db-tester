@@ -192,10 +192,11 @@ public final class CsvScenarioTable extends ScenarioTable {
       final Set<ScenarioName> scenarioNames) {
     return Optional.of(scenarioNames)
         .filter(names -> !names.isEmpty())
-        .flatMap(names ->
-            Optional.ofNullable(scenarioColumn)
-                .flatMap(column -> readScenarioName(row, column))
-                .map(names::contains))
+        .flatMap(
+            names ->
+                Optional.ofNullable(scenarioColumn)
+                    .flatMap(column -> readScenarioName(row, column))
+                    .map(names::contains))
         .orElse(true);
   }
 
@@ -248,10 +249,10 @@ public final class CsvScenarioTable extends ScenarioTable {
    */
   private DataValue normalizeEmptyStringToNull(final DataValue dataValue) {
     return Optional.ofNullable(dataValue.value())
-      .filter(String.class::isInstance)
-      .map(String.class::cast)
-      .filter(String::isEmpty)
-      .map(s -> new DataValue(null))
-      .orElse(dataValue);
+        .filter(String.class::isInstance)
+        .map(String.class::cast)
+        .filter(String::isEmpty)
+        .map(s -> new DataValue(null))
+        .orElse(dataValue);
   }
 }
