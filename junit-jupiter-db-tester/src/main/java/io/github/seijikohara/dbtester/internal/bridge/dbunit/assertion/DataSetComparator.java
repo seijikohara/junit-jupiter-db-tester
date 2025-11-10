@@ -111,7 +111,7 @@ final class DataSetComparator {
         .filter(index -> !expectedTableNames.get(index).equals(actualTableNames.get(index)))
         .findFirst()
         .ifPresent(
-            _ -> {
+            unused -> {
               throw new ValidationException(
                   failureHandler.createFailure(
                       "tables", expectedTableNames.toString(), actualTableNames.toString()));

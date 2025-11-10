@@ -12,6 +12,7 @@ import java.sql.Connection;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import org.dbunit.DatabaseUnitException;
 import org.dbunit.database.DatabaseConnection;
@@ -88,7 +89,8 @@ final class TypeConverter {
   static IDatabaseConnection toDbUnitConnection(
       final Connection jdbcConnection, final @Nullable SchemaName schemaName) {
     try {
-      final var schemaNameString = schemaName != null ? schemaName.value() : null;
+      final var schemaNameString =
+          Optional.ofNullable(schemaName).map(SchemaName::value).orElse(null);
       return new DatabaseConnection(jdbcConnection, schemaNameString);
     } catch (final DatabaseUnitException e) {
       throw new ValidationException("Failed to create database connection with schema", e);

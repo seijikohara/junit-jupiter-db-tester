@@ -149,7 +149,7 @@ public final class CsvScenarioTable extends ScenarioTable {
   private List<ColumnName> deriveDataColumns(
       final Collection<ColumnName> columns, final @Nullable ColumnName scenarioColumn) {
     return Optional.ofNullable(scenarioColumn)
-        .map(_ -> columns.stream().skip(1))
+        .map(unused -> columns.stream().skip(1))
         .orElseGet(columns::stream)
         .toList();
   }
@@ -190,10 +190,12 @@ public final class CsvScenarioTable extends ScenarioTable {
       final Row row,
       final @Nullable ColumnName scenarioColumn,
       final Set<ScenarioName> scenarioNames) {
-    return Optional.ofNullable(scenarioColumn)
-        .filter(_ -> !scenarioNames.isEmpty())
-        .flatMap(column -> readScenarioName(row, column))
-        .map(scenarioNames::contains)
+    return Optional.of(scenarioNames)
+        .filter(names -> !names.isEmpty())
+        .flatMap(names ->
+            Optional.ofNullable(scenarioColumn)
+                .flatMap(column -> readScenarioName(row, column))
+                .map(names::contains))
         .orElse(true);
   }
 
@@ -245,10 +247,11 @@ public final class CsvScenarioTable extends ScenarioTable {
    * @return DataValue containing the normalized value (null if the value was an empty string)
    */
   private DataValue normalizeEmptyStringToNull(final DataValue dataValue) {
-    final var value = dataValue.value();
-    if (value instanceof String s && s.isEmpty()) {
-      return new DataValue(null);
-    }
-    return dataValue;
+    return Optional.ofNullable(dataValue.value())
+      .filter(String.class::isInstance)
+      .map(String.class::cast)
+      .filter(String::isEmpty)
+      .map(s -> new DataValue(null))
+      .orElse(dataValue);
   }
 }

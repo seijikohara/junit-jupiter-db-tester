@@ -1,5 +1,6 @@
 package io.github.seijikohara.dbtester.api.domain;
 
+import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -17,6 +18,6 @@ public record DataValue(@Nullable Object value) {
    * @return true if the wrapped value is null, false otherwise
    */
   public boolean isNull() {
-    return value == null;
+    return Optional.ofNullable(value).isEmpty();
   }
 }

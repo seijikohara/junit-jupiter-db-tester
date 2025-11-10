@@ -12,6 +12,8 @@ plugins {
     alias(libs.plugins.version.catalog.update)
 }
 
+group = "io.github.seijikohara"
+
 // Configure version management with axion-release-plugin
 scmVersion {
     // Use semantic versioning - always use the highest version from tags
@@ -48,8 +50,20 @@ scmVersion {
     }
 }
 
-group = "io.github.seijikohara"
 version = scmVersion.version
+
+// Configure version catalog update plugin
+versionCatalogUpdate {
+    // Sort version catalog entries alphabetically
+    sortByKey = true
+}
+
+// Configure Spotless for root project
+extensions.configure<SpotlessExtension> {
+    kotlinGradle {
+        ktlint()
+    }
+}
 
 // Configure group and version for all projects
 allprojects {
@@ -65,14 +79,26 @@ subprojects {
     apply(plugin = "com.diffplug.spotless")
     apply(plugin = "net.ltgt.errorprone")
 
-    // Configure Java toolchain to use Java 25
+    // Configure extensions
     extensions.configure<JavaPluginExtension> {
         toolchain {
-            languageVersion = JavaLanguageVersion.of(25)
+            languageVersion = JavaLanguageVersion.of(21)
+        }
+    }
+    extensions.configure<TestingExtension> {
+        suites {
+            withType<JvmTestSuite> {
+                useJUnitJupiter()
+            }
+        }
+    }
+    extensions.configure<SpotlessExtension> {
+        java {
+            googleJavaFormat()
         }
     }
 
-    // Force Guava version across all configurations to avoid conflicts
+    // Configure dependencies
     configurations.configureEach {
         resolutionStrategy.force(rootProject.libs.guava.get())
     }
@@ -86,6 +112,7 @@ subprojects {
         "errorprone"(rootProject.libs.nullaway)
     }
 
+    // Configure tasks
     tasks.withType<JavaCompile>().configureEach {
         options.encoding = "UTF-8"
         options.compilerArgs.addAll(
@@ -93,6 +120,7 @@ subprojects {
                 "-Xlint:all",
                 "-Xdoclint:all",
                 "-Werror",
+                "-XDaddTypeAnnotationsToSymbol=true",
             ),
         )
         options.errorprone {
@@ -107,30 +135,4 @@ subprojects {
             option("NullAway:SuggestSuppressions", "false")
         }
     }
-
-    extensions.configure<TestingExtension> {
-        suites {
-            withType<JvmTestSuite> {
-                useJUnitJupiter()
-            }
-        }
-    }
-
-    extensions.configure<SpotlessExtension> {
-        java {
-            googleJavaFormat()
-        }
-    }
-}
-
-extensions.configure<SpotlessExtension> {
-    kotlinGradle {
-        ktlint()
-    }
-}
-
-// Configure version catalog update plugin
-versionCatalogUpdate {
-    // Sort version catalog entries alphabetically
-    sortByKey = true
 }

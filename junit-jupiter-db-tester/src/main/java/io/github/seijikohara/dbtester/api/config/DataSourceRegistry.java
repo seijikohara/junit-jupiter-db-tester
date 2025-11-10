@@ -126,7 +126,7 @@ public final class DataSourceRegistry {
    * @return true if a default data source exists
    */
   public boolean hasDefault() {
-    return defaultDataSource != null;
+    return Optional.ofNullable(defaultDataSource).isPresent();
   }
 
   /**
