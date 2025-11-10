@@ -44,7 +44,7 @@ public final class DatabaseAssert {
     protected boolean skipCompare(
         final String columnName, final Object expectedValue, final Object actualValue) {
       // Convert to ColumnName for type safety validation
-      final var _ = new ColumnName(columnName);
+      final var unused = new ColumnName(columnName);
       return super.skipCompare(columnName, expectedValue, actualValue);
     }
   }

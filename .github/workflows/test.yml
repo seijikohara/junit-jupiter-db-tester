@@ -7,15 +7,19 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    strategy:
+      matrix:
+        java-version: ['21', '25']
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
 
-      - name: Set up JDK
+      - name: Set up JDK ${{ matrix.java-version }}
         uses: actions/setup-java@v5
         with:
           distribution: 'temurin'
-          java-version: '25'
+          java-version: ${{ matrix.java-version }}
           cache: 'gradle'
 
       - name: Build and test

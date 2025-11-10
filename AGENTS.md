@@ -339,7 +339,7 @@ testUpdateUser,1,Alice Updated,alice.updated@example.com
 - **Available operations**: See `api/operation/Operation` enum for all supported database operations
 
 ### Technology Stack
-- **Java**: 25 (via Gradle toolchain)
+- **Java**: 21 (via Gradle toolchain)
 - **Build Tool**: Gradle wrapper
 - **Testing**: JUnit Jupiter, DbUnit, Testcontainers (integration tests)
 - **Databases**: Any JDBC-compatible database (tested: H2, MySQL, PostgreSQL, Derby, HSQLDB)

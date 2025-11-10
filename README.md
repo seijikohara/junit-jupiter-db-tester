@@ -2,9 +2,9 @@
 
 [![Maven Central](https://img.shields.io/maven-central/v/io.github.seijikohara/junit-jupiter-db-tester)](https://central.sonatype.com/artifact/io.github.seijikohara/junit-jupiter-db-tester)
 [![Test](https://github.com/seijikohara/junit-jupiter-db-tester/actions/workflows/test.yml/badge.svg)](https://github.com/seijikohara/junit-jupiter-db-tester/actions/workflows/test.yml)
-[![Java](https://img.shields.io/badge/Java-25-orange?logo=openjdk)](https://openjdk.org/)
+[![Java](https://img.shields.io/badge/Java-21-orange?logo=openjdk)](https://openjdk.org/)
 [![Gradle](https://img.shields.io/badge/Gradle-9-02303A?logo=gradle)](https://gradle.org/)
-[![JUnit](https://img.shields.io/badge/JUnit-6-25A162?logo=junit5)](https://junit.org/)
+[![JUnit](https://img.shields.io/badge/JUnit-6-25A162)](https://junit.org/)
 [![DbUnit](https://img.shields.io/badge/DbUnit-3-blue)](https://dbunit.sourceforge.net/dbunit/)
 [![Testcontainers](https://img.shields.io/badge/Testcontainers-2-2496ED?logo=docker)](https://testcontainers.com/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -42,7 +42,7 @@ final class UserServiceTest {
     static void setupDataSource(final ExtensionContext context) {
         final DataSourceRegistry registry = DatabaseTestExtension.getRegistry(context);
         // Create and configure your DataSource here (e.g., H2, MySQL, PostgreSQL)
-        final DataSource dataSource = ...; // Initialize your DataSource
+        final DataSource dataSource = ...; // InitiaÏlize your DataSource
         registry.registerDefault(dataSource);
     }
 
@@ -135,6 +135,27 @@ void testWithCustomExpectation() {
 
 Validation is read-only and performs row-by-row, column-by-column comparison.
 
+**Error Messages**
+
+When data validation fails, the framework provides clear, detailed error messages to help identify the mismatch:
+
+```java
+// Example: Value mismatch in a specific cell
+org.dbunit.assertion.DbComparisonFailure[value (table=USERS, row=2, col=EMAIL)expected:<charlie@example.com> but was:<charlie@wrong.com>]
+
+// Example: Row count mismatch
+org.dbunit.assertion.DbComparisonFailure[row count (table=USERS)expected:<3> but was:<2>]
+```
+
+Each error message includes:
+- **Table name** - The table where the mismatch occurred
+- **Row index** - Zero-based row number (row=0 is the first data row in CSV)
+- **Column name** - The specific column containing the unexpected value
+- **Expected value** - The value from your CSV expectation file
+- **Actual value** - The value currently in the database
+
+Note: The framework stops at the first validation error encountered, allowing you to fix issues incrementally.
+
 #### @DataSet
 
 Configures CSV dataset location, data source, and scenario filtering. Used within `@Preparation` and `@Expectation`.
@@ -181,7 +202,7 @@ The [`junit-jupiter-db-tester-examples/`](junit-jupiter-db-tester-examples/) dir
 
 ## Requirements
 
-- Java 25 or later
+- Java 21 or later
 - JUnit Jupiter
 - JDBC-compatible database (any database supported by DbUnit)
 

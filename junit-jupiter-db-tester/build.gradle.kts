@@ -20,6 +20,11 @@ dependencies {
     implementation(libs.slf4j.api)
 }
 
+java {
+    withSourcesJar()
+    withJavadocJar()
+}
+
 // Configure test suites using Gradle's testing DSL (Gradle 7.3+)
 testing {
     suites {
@@ -42,11 +47,6 @@ testing {
             }
         }
     }
-}
-
-java {
-    withSourcesJar()
-    withJavadocJar()
 }
 
 tasks {
