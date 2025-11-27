@@ -1,5 +1,4 @@
 [versions]
-axion-release = "1.21.1"
 checker-qual = "3.52.0"
 dbunit = "3.0.0"
 derby = "10.17.1.0"
@@ -64,7 +63,6 @@ testcontainers-oracle-free = { module = "org.testcontainers:testcontainers-oracl
 testcontainers-postgresql = { module = "org.testcontainers:testcontainers-postgresql" }
 
 [plugins]
-axion-release = { id = "pl.allegro.tech.build.axion-release", version.ref = "axion-release" }
 errorprone = { id = "net.ltgt.errorprone", version.ref = "errorprone-plugin" }
 jreleaser = { id = "org.jreleaser", version.ref = "jreleaser" }
 spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }

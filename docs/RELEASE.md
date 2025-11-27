@@ -93,67 +93,76 @@ See [PUBLISHING.md](PUBLISHING.md) for detailed setup instructions:
 
 #### How Versioning Works
 
-The project version is automatically derived from Git tags:
+The project version is managed via `gradle.properties`:
 
-- **No tags**: Version is `0.1.0-SNAPSHOT`
-- **Tagged commit**: Version matches the tag (e.g., `v1.0.0` becomes `1.0.0`)
-- **Commit after tag**: Version is `<next-version>-SNAPSHOT` (e.g., `1.0.1-SNAPSHOT`)
+- **Development**: Default version is `0.1.0-SNAPSHOT`
+- **Release**: Version is specified explicitly via command line (`-Pversion=1.0.0`) or GitHub Actions workflow
 
 #### Check Current Version
 
 ```bash
-./gradlew currentVersion
-# Output: Project version: 1.0.0-SNAPSHOT
-```
+# View version in gradle.properties
+cat gradle.properties | grep version
 
-#### Version Commands
-
-```bash
-./gradlew currentVersion                            # Show current version
-./gradlew verifyRelease                             # Verify release configuration
-./gradlew release                                   # Create release tag
-./gradlew release -Prelease.version=2.0.0          # Create specific version tag
-./gradlew markNextVersion -Prelease.version=2.0.0  # Mark next version
+# Or check via Gradle
+./gradlew properties | grep "^version:"
 ```
 
 ### Local Release Process
 
-**Step 1: Create Release Tag**
+**Step 1: Determine Release Version**
+
+Check existing tags and determine the next version:
 
 ```bash
-# Create release tag (e.g., v1.2.0)
-./gradlew release
-# Or specify version: ./gradlew release -Prelease.version=1.2.0
+# List existing tags
+git tag -l 'v*' --sort=-v:refname
+
+# Determine next version based on semantic versioning:
+# - PATCH (1.0.0 -> 1.0.1): Bug fixes
+# - MINOR (1.0.0 -> 1.1.0): New features (backward compatible)
+# - MAJOR (1.0.0 -> 2.0.0): Breaking changes
 ```
 
 **Step 2: Build and Stage All Modules**
 
-```bash
-./gradlew :junit-jupiter-db-tester:clean \
-          :junit-jupiter-db-tester:build \
-          :junit-jupiter-db-tester:publishAllPublicationsToStagingRepository \
-          :junit-jupiter-db-tester-bom:clean \
-          :junit-jupiter-db-tester-bom:publishAllPublicationsToStagingRepository \
-          :junit-jupiter-db-tester-spring-boot-starter:clean \
-          :junit-jupiter-db-tester-spring-boot-starter:build \
-          :junit-jupiter-db-tester-spring-boot-starter:publishAllPublicationsToStagingRepository \
-          --no-configuration-cache
-```
-
-**Step 3: Deploy to GitHub and Maven Central**
+Build with the release version (replace `1.2.0` with your target version):
 
 ```bash
-./gradlew :junit-jupiter-db-tester:jreleaserFullRelease --no-configuration-cache
+./gradlew clean build publish -Pversion=1.2.0 --no-configuration-cache
 ```
 
-This operation:
-- Creates GitHub Release with auto-generated changelog
-- Uploads signed artifacts from all modules to Maven Central
-- Automatically publishes to Maven Central (no manual approval required)
+This generates for each module:
+- Main JAR (or POM for BOM)
+- Sources JAR (except BOM)
+- Javadoc JAR (except BOM)
+- POM file
+- GPG signatures (`.asc` files)
+
+Artifacts are staged in each module's `build/staging-deploy/` directory.
+
+**Step 3: Deploy to Maven Central**
+
+```bash
+./gradlew jreleaserDeploy -Pversion=1.2.0 --no-configuration-cache
+```
+
+This uploads signed artifacts from all modules to Maven Central.
 
 **Note**: This can take 30-45 minutes for the deployment validation and publishing.
 
-**Step 4: Verify Release**
+**Step 4: Create Git Tag and GitHub Release**
+
+```bash
+# Create and push tag
+git tag -a v1.2.0 -m "Release v1.2.0"
+git push origin v1.2.0
+
+# Create GitHub Release (using gh CLI)
+gh release create v1.2.0 --title "Release 1.2.0" --generate-notes
+```
+
+**Step 5: Verify Release**
 
 **GitHub Release** (immediate):
 - Visit: `https://github.com/seijikohara/junit-jupiter-db-tester/releases`
@@ -175,37 +184,12 @@ dependencies {
 }
 ```
 
-**Step 5: Update to Next Development Version**
-
-The version automatically becomes the next SNAPSHOT after the tag is created. No manual version updates needed!
-
-```bash
-./gradlew currentVersion
-# Output: Project version: 1.2.1-SNAPSHOT
-```
-
-#### Automated Release (One Command)
-
-```bash
-./gradlew release \
-          :junit-jupiter-db-tester:clean \
-          :junit-jupiter-db-tester:build \
-          :junit-jupiter-db-tester:publishAllPublicationsToStagingRepository \
-          :junit-jupiter-db-tester-bom:clean \
-          :junit-jupiter-db-tester-bom:publishAllPublicationsToStagingRepository \
-          :junit-jupiter-db-tester-spring-boot-starter:clean \
-          :junit-jupiter-db-tester-spring-boot-starter:build \
-          :junit-jupiter-db-tester-spring-boot-starter:publishAllPublicationsToStagingRepository \
-          :junit-jupiter-db-tester:jreleaserFullRelease \
-          --no-configuration-cache
-```
-
-**Warning**: Use this approach only after successfully completing at least one step-by-step release.
-
 #### Dry Run (Testing)
 
+Test the release process without actually deploying:
+
 ```bash
-./gradlew :junit-jupiter-db-tester:jreleaserFullRelease --dry-run --no-configuration-cache
+./gradlew jreleaserDeploy -Pversion=1.2.0 --dryrun --no-configuration-cache
 ```
 
 ---
@@ -250,38 +234,30 @@ BREAKING CHANGE: DatabaseTestExtension.getRegistry() now returns Optional<DataSo
 
 ## Version Bumping Strategy
 
-### Automatic Version Bumping
+Version is determined manually following [Semantic Versioning](https://semver.org/):
 
-axion-release-plugin calculates the next version based on the current tag:
-
-- Patch bump (default): `1.0.0` to `1.0.1`
-- Minor bump: `./gradlew release -Prelease.versionIncrementer=incrementMinor`
-- Major bump: `./gradlew release -Prelease.versionIncrementer=incrementMajor`
-
-### Manual Version Bumping
-
-```bash
-./gradlew release -Prelease.version=2.0.0
-```
+- **PATCH** (1.0.0 → 1.0.1): Bug fixes, documentation updates
+- **MINOR** (1.0.0 → 1.1.0): New features (backward compatible)
+- **MAJOR** (1.0.0 → 2.0.0): Breaking changes
 
 ### Pre-release Versions
 
+For pre-release versions, use appropriate suffixes:
+
 ```bash
 # Beta release
-./gradlew release -Prelease.version=1.0.0-beta.1
+./gradlew clean build publish -Pversion=1.0.0-beta.1
 
 # Release candidate
-./gradlew release -Prelease.version=1.0.0-rc.1
+./gradlew clean build publish -Pversion=1.0.0-rc.1
 ```
 
 ## Available Gradle Tasks
 
-### Version Management
+### Version Check
 
 ```bash
-./gradlew currentVersion       # Show current version
-./gradlew verifyRelease         # Verify release configuration
-./gradlew release               # Create release tag
+./gradlew properties | grep "^version:"    # Show current version
 ```
 
 ### Publishing (Per Module)
@@ -315,13 +291,13 @@ axion-release-plugin calculates the next version based on the current tag:
 
 ```bash
 # Check Git tags
-git tag -l
+git tag -l 'v*' --sort=-v:refname
 
 # Fetch all tags if out of sync
 git fetch --tags
 
-# Check current version
-./gradlew currentVersion
+# Check current version in gradle.properties
+cat gradle.properties | grep version
 ```
 
 ### GPG Signing Errors
@@ -399,39 +375,30 @@ For detailed troubleshooting, see [PUBLISHING.md](PUBLISHING.md).
 # 1. Ensure all tests pass
 ./gradlew clean build test
 
-# 2. Check current version
-./gradlew currentVersion
-# Output: Project version: 1.1.1-SNAPSHOT
+# 2. Check existing tags and determine next version
+git tag -l 'v*' --sort=-v:refname | head -5
+# Determine version based on changes (PATCH/MINOR/MAJOR)
 
-# 3. Create release tag (automatically pushes to remote)
-./gradlew release
+# 3. Build and publish all modules to staging (replace 1.2.0 with your version)
+./gradlew clean build publish -Pversion=1.2.0 --no-configuration-cache
 
-# 4. Build and publish all modules to staging
-./gradlew :junit-jupiter-db-tester:clean \
-          :junit-jupiter-db-tester:build \
-          :junit-jupiter-db-tester:publishAllPublicationsToStagingRepository \
-          :junit-jupiter-db-tester-bom:clean \
-          :junit-jupiter-db-tester-bom:publishAllPublicationsToStagingRepository \
-          :junit-jupiter-db-tester-spring-boot-starter:clean \
-          :junit-jupiter-db-tester-spring-boot-starter:build \
-          :junit-jupiter-db-tester-spring-boot-starter:publishAllPublicationsToStagingRepository \
-          --no-configuration-cache
+# 4. Deploy to Maven Central
+./gradlew jreleaserDeploy -Pversion=1.2.0 --no-configuration-cache
 
-# 5. Create GitHub Release and deploy to Maven Central
-./gradlew :junit-jupiter-db-tester:jreleaserFullRelease --no-configuration-cache
+# 5. Create Git tag and GitHub Release
+git tag -a v1.2.0 -m "Release v1.2.0"
+git push origin v1.2.0
+gh release create v1.2.0 --title "Release 1.2.0" --generate-notes
 
 # 6. Verify on GitHub and Maven Central
 # GitHub: https://github.com/seijikohara/junit-jupiter-db-tester/releases
 # Maven Central (Core): https://central.sonatype.com/artifact/io.github.seijikohara/junit-jupiter-db-tester
 # Maven Central (BOM): https://central.sonatype.com/artifact/io.github.seijikohara/junit-jupiter-db-tester-bom
 # Maven Central (Starter): https://central.sonatype.com/artifact/io.github.seijikohara/junit-jupiter-db-tester-spring-boot-starter
-
-# 7. Next commits will automatically be 1.2.1-SNAPSHOT
 ```
 
 ## References
 
-- [axion-release-plugin Documentation](https://axion-release-plugin.readthedocs.io/)
 - [JReleaser Documentation](https://jreleaser.org/)
 - [Conventional Commits](https://www.conventionalcommits.org/)
 - [Semantic Versioning](https://semver.org/)
