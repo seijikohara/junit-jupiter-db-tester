@@ -1,0 +1,4 @@
+ID,NAME,EMAIL,ARCHIVED_AT
+100,OldUser1,old1@example.com,2023-01-01 00:00:00
+101,OldUser2,old2@example.com,2023-06-15 12:30:00
+102,OldUser3,old3@example.com,2024-01-01 00:00:00

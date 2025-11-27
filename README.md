@@ -19,8 +19,21 @@ A [JUnit Jupiter](https://junit.org/) extension for database testing with CSV-ba
 - **Partial Column Validation** - Validate only the columns you care about, ignore auto-generated fields
 - **Multi-Database Support** - Register and test multiple data sources simultaneously
 - **Programmatic Assertions** - Advanced validation with the `DatabaseAssertion` API
+- **Spring Boot Integration** - Auto-configuration with automatic DataSource discovery and registration
+
+## Project Modules
+
+| Module | Description |
+|--------|-------------|
+| [`junit-jupiter-db-tester`](junit-jupiter-db-tester/) | Core library with JUnit Jupiter extension and CSV-based testing |
+| [`junit-jupiter-db-tester-bom`](junit-jupiter-db-tester-bom/) | Bill of Materials for dependency version management |
+| [`junit-jupiter-db-tester-spring-boot-starter`](junit-jupiter-db-tester-spring-boot-starter/) | Spring Boot auto-configuration with automatic DataSource registration |
+| [`junit-jupiter-db-tester-examples`](junit-jupiter-db-tester-examples/) | Comprehensive examples for core library features |
+| [`junit-jupiter-db-tester-spring-boot-starter-example`](junit-jupiter-db-tester-spring-boot-starter-example/) | Spring Boot integration examples |
 
 ## Installation
+
+### Core Library
 
 ```gradle
 dependencies {
@@ -28,7 +41,25 @@ dependencies {
 }
 ```
 
-Replace `VERSION` with the latest version from [Maven Central](https://central.sonatype.com/artifact/io.github.seijikohara/junit-jupiter-db-tester).
+### With BOM (Recommended)
+
+```gradle
+dependencies {
+    testImplementation platform('io.github.seijikohara:junit-jupiter-db-tester-bom:VERSION')
+    testImplementation 'io.github.seijikohara:junit-jupiter-db-tester'
+}
+```
+
+### Spring Boot Integration
+
+```gradle
+dependencies {
+    testImplementation platform('io.github.seijikohara:junit-jupiter-db-tester-bom:VERSION')
+    testImplementation 'io.github.seijikohara:junit-jupiter-db-tester-spring-boot-starter'
+}
+```
+
+Replace `VERSION` with the latest version from [Maven Central](https://central.sonatype.com/artifact/io.github.seijikohara/junit-jupiter-db-tester-bom).
 
 ## Quick Start
 
@@ -42,7 +73,7 @@ final class UserServiceTest {
     static void setupDataSource(final ExtensionContext context) {
         final DataSourceRegistry registry = DatabaseTestExtension.getRegistry(context);
         // Create and configure your DataSource here (e.g., H2, MySQL, PostgreSQL)
-        final DataSource dataSource = ...; // InitiaÏlize your DataSource
+        final DataSource dataSource = ...; // Initialize your DataSource
         registry.registerDefault(dataSource);
     }
 
@@ -198,17 +229,61 @@ For advanced validation scenarios requiring fine-grained control, the framework 
 
 See [`ProgrammaticAssertionApiTest.java`](junit-jupiter-db-tester-examples/src/test/java/example/feature/ProgrammaticAssertionApiTest.java) for complete working examples.
 
+### Spring Boot Integration
+
+For Spring Boot applications, use [`SpringBootDatabaseTestExtension`](junit-jupiter-db-tester-spring-boot-starter/src/main/java/io/github/seijikohara/dbtester/spring/autoconfigure/SpringBootDatabaseTestExtension.java) for automatic DataSource registration without manual `@BeforeAll` setup:
+
+```java
+@SpringBootTest
+@ExtendWith(SpringBootDatabaseTestExtension.class)
+class UserRepositoryTest {
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Test
+    @Preparation
+    @Expectation
+    void testCreateUser() {
+        userRepository.save(new User("Alice", "alice@example.com"));
+    }
+}
+```
+
+**Key Features:**
+- **Zero Configuration** - DataSources are automatically discovered and registered from Spring context
+- **Multiple DataSource Support** - All `DataSource` beans are registered by bean name
+- **Primary DataSource** - Single or `@Primary` annotated DataSource is registered as default
+
+Enable auto-configuration in `application.properties`:
+
+```properties
+dbtester.enabled=true
+dbtester.auto-register-data-sources=true
+```
+
+For detailed Spring Boot integration documentation, see [junit-jupiter-db-tester-spring-boot-starter/README.md](junit-jupiter-db-tester-spring-boot-starter/README.md).
+
 ## Examples
 
-The [`junit-jupiter-db-tester-examples/`](junit-jupiter-db-tester-examples/) directory contains comprehensive working examples demonstrating all features.
+### Core Library Examples
 
-→ **See [junit-jupiter-db-tester-examples/README.md](junit-jupiter-db-tester-examples/README.md)** for the complete learning guide with step-by-step tutorials.
+The [`junit-jupiter-db-tester-examples/`](junit-jupiter-db-tester-examples/) directory contains comprehensive working examples demonstrating all core features.
+
+For the complete learning guide with step-by-step tutorials, see [junit-jupiter-db-tester-examples/README.md](junit-jupiter-db-tester-examples/README.md).
+
+### Spring Boot Examples
+
+The [`junit-jupiter-db-tester-spring-boot-starter-example/`](junit-jupiter-db-tester-spring-boot-starter-example/) directory provides Spring Boot integration examples including Spring Data JPA repository testing.
+
+For Spring Boot specific examples, see [junit-jupiter-db-tester-spring-boot-starter-example/README.md](junit-jupiter-db-tester-spring-boot-starter-example/README.md).
 
 ## Requirements
 
 - Java 21 or later
-- JUnit Jupiter
+- JUnit Jupiter 6
 - JDBC-compatible database (any database supported by DbUnit)
+- Spring Boot 4 or later (for Spring Boot Starter)
 
 ## License
 

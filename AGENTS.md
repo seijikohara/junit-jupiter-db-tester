@@ -16,333 +16,24 @@ A JUnit Jupiter extension for database testing with CSV-based test data manageme
 - **Partial Column Validation**: Validate only specific columns, ignore auto-generated fields
 - **Multi-Database Support**: Register and test multiple data sources simultaneously
 - **Programmatic Assertions**: Advanced validation via `DatabaseAssertion` API
+- **Spring Boot Integration**: Auto-configuration with automatic DataSource discovery
 
-### Architecture
+### Project Modules
 
-**Base Package**: `io.github.seijikohara.dbtester`
-
-#### Package Structure: PUBLIC API vs INTERNAL
-
-**Fundamental Principle**: Only `api.*` packages are public-facing. All other packages are internal implementation details protected by NullAway at compile time.
-
-```
-io.github.seijikohara.dbtester
-├── api/                                # PUBLIC API (user-facing, requires runtime null checks)
-│   ├── annotation/                     # @Preparation, @Expectation, @DataSet
-│   ├── assertion/                      # DatabaseAssertion - programmatic assertions
-│   ├── config/                         # PUBLIC CONFIGURATION
-│   │   ├── Configuration               # Immutable configuration settings
-│   │   ├── DataSourceRegistry          # Thread-safe DataSource registry
-│   │   ├── ConventionSettings          # File/directory conventions
-│   │   └── OperationDefaults           # Default operation settings
-│   ├── context/                        # Test execution context
-│   │   └── TestContext                 # Test class/method metadata
-│   ├── dataset/                        # Data abstraction layer (public types)
-│   │   ├── DataSet                     # Dataset interface
-│   │   ├── Table                       # Table interface
-│   │   ├── Row                         # Row interface
-│   │   ├── ScenarioDataSet             # Scenario-based dataset base class
-│   │   ├── ScenarioTable               # Scenario-based table base class
-│   │   ├── DataSetFormatProvider       # Interface for file format providers
-│   │   └── DataSetFormatRegistry       # Auto-registration of format providers (ServiceLoader)
-│   ├── domain/                         # Domain value objects (type-safe wrappers)
-│   │   ├── StringIdentifier            # Base interface for string-based identifiers (sealed)
-│   │   ├── TableName                   # Database table identifier
-│   │   ├── ColumnName                  # Table column identifier
-│   │   ├── ScenarioName                # Test scenario identifier
-│   │   ├── ScenarioMarker              # Scenario marker column identifier
-│   │   ├── DataSourceName              # Data source identifier
-│   │   ├── SchemaName                  # Database schema identifier
-│   │   ├── DataValue                   # Cell value wrapper (supports null)
-│   │   └── FileExtension               # File extension with normalization
-│   ├── exception/                      # PUBLIC EXCEPTIONS (thrown to user code)
-│   │   ├── DatabaseTesterException     # Base exception
-│   │   ├── ConfigurationException      # Configuration/initialization failures
-│   │   ├── DataSetLoadException        # Data loading/parsing failures
-│   │   ├── DataSourceNotFoundException # Missing DataSource registration
-│   │   └── ValidationException         # Data validation/assertion failures
-│   ├── extension/                      # PUBLIC JUNIT INTEGRATION
-│   │   └── DatabaseTestExtension       # JUnit Jupiter extension for @Preparation/@Expectation
-│   ├── loader/                         # Dataset loading API
-│   │   └── DataSetLoader               # Interface for dataset loaders
-│   └── operation/                      # Database operations
-│       └── Operation                   # Operation enum (CLEAN_INSERT, etc.)
-│
-└── internal/                           # INTERNAL IMPLEMENTATION (framework internals)
-    ├── junit/lifecycle/                # Test lifecycle orchestration
-    ├── dataset/                        # Data abstraction layer (internal implementations)
-    │   ├── TableOrderingResolver       # Base class for table ordering
-    │   └── scenario/                   # Scenario-based datasets (internal implementations)
-    │       └── csv/                    # CSV format implementation
-    │           ├── CsvScenarioDataSet  # CSV dataset implementation
-    │           ├── CsvScenarioTable    # CSV table implementation
-    │           └── CsvFormatProvider   # CSV format provider
-    ├── loader/                         # Data loading implementation
-    │   ├── TestClassNameBasedDataSetLoader # Convention-based loader
-    │   ├── AnnotationResolver          # Annotation value resolution
-    │   ├── DirectoryResolver           # Directory location resolution
-    │   └── DataSetFactory              # Dataset instance creation
-    └── bridge/dbunit/                  # DbUnit bridge layer (complete isolation)
-        ├── DatabaseBridge              # PUBLIC - Unified entry point
-        ├── TypeConverter               # Package-private - Type conversion
-        ├── format/                     # Strategy pattern: file format readers
-        │   ├── DataSetReader           # Public interface - Strategy pattern
-        │   └── CsvDataSetReader        # Public implementation - CSV format
-        ├── adapter/                    # Adapter pattern: DbUnit → Framework
-        │   ├── DbUnitDataSetAdapter    # Package-private - IDataSet adapter
-        │   ├── DbUnitTableAdapter      # Package-private - ITable adapter
-        │   └── DbUnitRowAdapter        # Package-private - Row adapter
-        └── assertion/                  # Assertion delegation and utilities
-            ├── DatabaseAssert          # Public - Assertion delegation
-            ├── FailureHandlerAdapter   # Public - Handler conversion
-            ├── ColumnFilter            # Package-private - Column filtering
-            ├── DataSetComparator       # Package-private - DataSet comparison
-            └── TableComparator         # Package-private - Table comparison
-
-junit-jupiter-db-tester-examples/       # USAGE EXAMPLES (not part of library)
-├── src/test/java/example/feature/      # Feature demonstrations
-└── src/test/java/example/database/     # DB-specific integration tests
-```
-
-#### Public API Boundary Rules
-
-**Users interact with `api.*` packages only:**
-
-```java
-// Option 1: Annotation-based usage (most common)
-@ExtendWith(DatabaseTestExtension.class)
-class MyTest {
-    @BeforeAll
-    static void setup(ExtensionContext context) {
-        DataSourceRegistry registry = DatabaseTestExtension.getRegistry(context);
-        registry.registerDefault(myDataSource);
-    }
-
-    @Preparation
-    @Expectation
-    @Test
-    void testUserCreation() {
-        // Test logic
-    }
-}
-
-// Option 2: Programmatic assertions
-DatabaseAssertion.assertEquals(expectedDataSet, actualDataSet);
-```
-
-**Users MUST NOT directly use internal packages** (`internal/`). These are implementation details subject to change.
-
-#### Package Dependency Rules
-
-**Allowed Dependencies** (top → down only):
-- `api.extension` → can depend on: `api.*`, `internal.*`
-- `api.config` → can depend on: `api.domain`, `api.exception`, `api.dataset`, `api.loader`
-- `api.loader` → can depend on: `api.domain`, `api.exception`, `api.dataset`, `api.context`
-- `api.context` → can depend on: `api.config`
-- `api.dataset` → can depend on: `api.domain`
-- `api.exception` → no dependencies on other api packages
-- `api.annotation` → no dependencies on other api packages
-- `api.assertion` → can depend on: `api.dataset`
-- `api.operation` → no dependencies on other api packages
-- `internal.*` → can depend on: `api.*`
-
-#### DbUnit Isolation via Bridge Pattern
-
-**The framework completely isolates DbUnit dependencies using the Bridge pattern** in `internal.bridge.dbunit`. This ensures framework code remains DbUnit-independent and allows future migration to other database testing libraries.
-
-**Bridge Package Structure** (`internal.bridge.dbunit` - organized into sub-packages):
-
-```
-internal/bridge/dbunit/
-├── DatabaseBridge.java                # PUBLIC - Unified entry point (Singleton)
-├── TypeConverter.java                 # Package-private - Type conversion (Framework → DbUnit)
-│
-├── format/                            # Strategy pattern: file format readers
-│   ├── DataSetReader.java             # Public interface - Strategy pattern
-│   └── CsvDataSetReader.java          # Public - CSV format implementation
-│
-├── adapter/                           # Adapter pattern: DbUnit → Framework type wrapping
-│   ├── DbUnitDataSetAdapter.java      # Package-private - IDataSet → DataSet adapter
-│   ├── DbUnitTableAdapter.java        # Package-private - ITable → Table adapter
-│   └── DbUnitRowAdapter.java          # Package-private - Row adapter
-│
-└── assertion/                         # Assertion delegation and utilities
-    ├── DatabaseAssert.java            # Public - Assertion delegation to DbUnit
-    ├── FailureHandlerAdapter.java     # Public - Handler conversion
-    ├── ColumnFilter.java              # Package-private - Column filtering
-    ├── DataSetComparator.java         # Package-private - DataSet comparison
-    └── TableComparator.java           # Package-private - Table comparison
-```
-
-**Total**: 12 classes organized into 4 sub-packages
-**Visibility**: DatabaseBridge (public), plus 4 sub-package public classes for cross-package access
-**Patterns**: Bridge pattern with Strategy (format) and Adapter (adapter) sub-patterns
-
-**Key Principles**:
-1. **Complete isolation**: All DbUnit dependencies consolidated in `internal.bridge.dbunit` and sub-packages
-2. **Single entry point**: `DatabaseBridge` (Singleton) is the primary public interface to the bridge
-3. **Sub-package organization**:
-   - `format/` - Strategy pattern for file format readers (CSV, future JSON/YAML/XML)
-   - `adapter/` - Adapter pattern for DbUnit → Framework type conversion
-   - `assertion/` - Assertion delegation and utilities
-4. **Bridge pattern**: Isolates DbUnit implementation from framework domain model
-   - Framework types (DataSet, Table, Operation) on one side
-   - DbUnit types (IDataSet, ITable, DatabaseOperation) on the other
-   - TypeConverter and adapters bridge the gap
-5. **Bidirectional conversion**:
-   - **Framework → DbUnit**: TypeConverter (for operations and assertions)
-   - **DbUnit → Framework**: Adapter classes (for loading datasets)
-6. **Strong encapsulation**: Sub-package public classes only for internal cross-package access
-7. **Type safety**: DbUnit types never leak outside bridge package hierarchy
-8. **Path-based API**: Framework uses `java.nio.file.Path`; `java.io.File` restricted to CSV reader
-9. **Exception isolation**: DbUnit exceptions caught and wrapped in framework exceptions
-
-**Usage Pattern**:
-```java
-// Recommended: use unified bridge entry point
-final var bridge = DatabaseBridge.getInstance();
-final var schemaName = new SchemaName("public"); // or null for default schema
-
-// Execute operations
-bridge.executeOperation(dataSet, Operation.CLEAN_INSERT, dataSource, schemaName);
-
-// Load datasets
-final var csvDataSet = bridge.loadCsvDataSet(Path.of("test-data"));
-
-// Verify expectations
-bridge.verifyExpectation(expectedDataSet, dataSource);
-
-// Advanced assertions
-bridge.assertEqualsIgnoreColumns(expected, actual, "users", List.of("id", "created_at"));
-
-// Incorrect: package-private implementation classes not accessible
-final var assert = new DatabaseAssert();  // Compilation error - package-private
-```
-
-**Path vs File**:
-```java
-// Recommended: framework uses Path throughout
-Path dataDirectory = Path.of("src/test/resources/example/MyTest");
-DataSet dataSet = bridge.loadCsvDataSet(dataDirectory);  // Path parameter
-
-// Incorrect: avoid File in framework code (except CSV reader internals)
-File dataDirectory = new File("...");
-```
-
-#### Java Platform Module System (JPMS)
-
-This library uses the Java Platform Module System to enforce PUBLIC API boundaries at compile time.
-
-**Module Name**: `io.github.seijikohara.dbtester`
-
-**Exported Packages** (PUBLIC API):
-- All `api.*` packages are exported and accessible to consumers
-- `internal.*` packages are NOT exported and remain completely encapsulated
-
-**Transitive Dependencies** (automatically available to consumers):
-- `org.junit.jupiter.api`
-- `java.sql`
-
-**ServiceLoader Integration**:
-- `uses io.github.seijikohara.dbtester.api.dataset.DataSetFormatProvider`
-- Enables auto-discovery of format providers (CSV, future JSON/YAML)
-
-**Reflective Access**:
-- `api.extension` package is opened to `org.junit.platform.commons` for JUnit Jupiter extension loading
-
-The module system provides stronger encapsulation than package-private access, ensuring that internal implementation details cannot leak to user code even through reflection.
-
-#### Class Naming Conventions
-- Facade classes: `*Facade`
-- Registry classes: `*Registry`
-- Loader classes: `*Loader`
-- Factory classes: `*Factory`
-- Resolver classes: `*Resolver`
-- Validator/Verifier classes: `*Validator`, `*Verifier`
-- Executor classes: `*Executor`
-- Adapter classes: `*Adapter`
-- Exception classes: `*Exception`
-
-#### Key Concepts
-
-**Domain Value Objects** (Public API):
-Type-safe immutable records representing core domain concepts in `api.domain`:
-- `StringIdentifier` - Sealed interface for string-based identifiers with natural ordering
-- `TableName` - Database table identifier
-- `ColumnName` - Table column identifier
-- `ScenarioName` - Test scenario identifier
-- `ScenarioMarker` - Scenario marker column identifier (e.g., "#scenario")
-- `DataSourceName` - Data source identifier
-- `SchemaName` - Database schema identifier
-- `DataValue` - Wrapper for cell values (supports null)
-- `FileExtension` - File extension with automatic normalization
-
-These value objects provide:
-- **Type Safety**: Prevent mixing different string types (e.g., table name vs column name)
-- **Validation**: Enforce non-blank constraints at creation time
-- **Immutability**: Thread-safe by design
-- **Intent Clarity**: Self-documenting code through expressive type names
-
-**Note**: Domain objects are now part of the public API (`api.domain`) for type safety benefits.
-
-**StringIdentifier** (Base Interface):
-A sealed interface that provides a common contract for string-based domain identifiers. Uses F-bounded polymorphism (Curiously Recurring Template Pattern) to ensure type-safe comparisons. All StringIdentifier implementations:
-- Are backed by a non-null, non-blank string value
-- Are immutable and type-safe
-- Support natural ordering through Comparable implementation
-- Share common validation logic (validateNonBlankString)
-
-The sealed interface permits only specific domain identifier records (TableName, ColumnName, ScenarioName, ScenarioMarker, DataSourceName, SchemaName), ensuring type safety and preventing uncontrolled extension.
-
-**FileExtension** (Domain Object):
-Type-safe wrapper for file extensions with automatic normalization. Used by DataSetFormatRegistry to identify supported file formats. Features:
-- Automatic normalization (lowercase conversion, dot prefix addition)
-- Validation (non-empty after dot)
-- `fromFileName()` for extraction from file names
-- `matches()` for case-insensitive file name matching
-
-**Convention-Based Loading**:
-```
-src/test/resources/
-  com/example/
-    UserServiceTest/           # Test class name
-      testCreateUser/          # Test method name
-        USERS.csv              # Preparation data
-        PROFILES.csv
-        expected/              # Expectation directory
-          USERS.csv            # Expected data
-          PROFILES.csv
-        table-ordering.txt     # Optional: explicit table order
-
-**Supported Formats**: Any file extension backed by a registered `DataSetFormatProvider` is accepted
-for convention-based loading (discovered via `ServiceLoader`). Ensure each dataset directory
-contains at least one file whose extension matches a registered provider (CSV is available by
-default).
-```
-
-**Scenario Filtering**:
-CSV files with `[Scenario]` column filter rows by test method name:
-```csv
-[Scenario],ID,NAME,EMAIL
-testCreateUser,1,Alice,alice@example.com
-testUpdateUser,1,Alice Updated,alice.updated@example.com
-```
-
-**Table Ordering**:
-- **Automatic**: Alphabetical order (default)
-- **Manual**: `table-ordering.txt` with one table name per line
-- **Note**: Table ordering is determined during dataset loading. Use `table-ordering.txt` for custom order.
-
-**Operations**: Database operations for data preparation and verification
-- **Preparation default**: `CLEAN_INSERT` (delete all rows, then insert test data)
-- **Expectation default**: `NONE` (no data modification, validation only)
-- **Available operations**: See `api/operation/Operation` enum for all supported database operations
+| Module | Description | Documentation |
+|--------|-------------|---------------|
+| [`junit-jupiter-db-tester`](junit-jupiter-db-tester/) | Core library | [README](junit-jupiter-db-tester/README.md) |
+| [`junit-jupiter-db-tester-bom`](junit-jupiter-db-tester-bom/) | Bill of Materials | [README](junit-jupiter-db-tester-bom/README.md) |
+| [`junit-jupiter-db-tester-spring-boot-starter`](junit-jupiter-db-tester-spring-boot-starter/) | Spring Boot Starter | [README](junit-jupiter-db-tester-spring-boot-starter/README.md) |
+| [`junit-jupiter-db-tester-examples`](junit-jupiter-db-tester-examples/) | Core library examples | [README](junit-jupiter-db-tester-examples/README.md) |
+| [`junit-jupiter-db-tester-spring-boot-starter-example`](junit-jupiter-db-tester-spring-boot-starter-example/) | Spring Boot examples | [README](junit-jupiter-db-tester-spring-boot-starter-example/README.md) |
 
 ### Technology Stack
 - **Java**: 21 (via Gradle toolchain)
 - **Build Tool**: Gradle wrapper
 - **Testing**: JUnit Jupiter, DbUnit, Testcontainers (integration tests)
 - **Databases**: Any JDBC-compatible database (tested: H2, MySQL, PostgreSQL, Derby, HSQLDB)
+- **Spring Boot**: 4 (for Spring Boot Starter)
 
 ---
 
@@ -1614,12 +1305,19 @@ public final class WidgetRegistry {
 # Run all tests
 ./gradlew test
 
-# Library only
-./gradlew :lib:build
-./gradlew :lib:test
+# Core library only
+./gradlew :junit-jupiter-db-tester:build
+./gradlew :junit-jupiter-db-tester:test
 
-# Integration tests only
-./gradlew :example:test
+# Examples/integration tests only
+./gradlew :junit-jupiter-db-tester-examples:test
+
+# Spring Boot Starter only
+./gradlew :junit-jupiter-db-tester-spring-boot-starter:build
+./gradlew :junit-jupiter-db-tester-spring-boot-starter:test
+
+# Spring Boot Starter Example only
+./gradlew :junit-jupiter-db-tester-spring-boot-starter-example:test
 
 # Javadoc generation
 ./gradlew javadoc
@@ -1648,6 +1346,8 @@ All static analysis runs automatically during compilation. Violations cause buil
 | `junit-jupiter-db-tester/src/test/java` | Unit tests for library code | Mock only (no real DB) | [junit-jupiter-db-tester/src/test/AGENTS.md](junit-jupiter-db-tester/src/test/AGENTS.md) |
 | `junit-jupiter-db-tester-examples/src/test/java/example/` | Usage examples, framework demonstrations | H2 in-memory | Example-driven tests |
 | `junit-jupiter-db-tester-examples/src/test/java/example/{db}/` | Database-specific integration tests | Testcontainers (MySQL/PostgreSQL) | Real database tests |
+| `junit-jupiter-db-tester-spring-boot-starter/src/test/java` | Spring Boot Starter unit tests | Mock only | Auto-configuration tests |
+| `junit-jupiter-db-tester-spring-boot-starter-example/src/test/java` | Spring Boot integration examples | H2 in-memory | Spring Data JPA tests |
 
 **Unit Test Requirements** (junit-jupiter-db-tester/src/test/java):
 - Fast (< 1 second per test)

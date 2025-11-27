@@ -1,0 +1,44 @@
+{
+  "properties": [
+    {
+      "name": "dbtester.enabled",
+      "type": "java.lang.Boolean",
+      "description": "Whether to enable the JUnit Jupiter DB Tester Spring Boot integration.",
+      "defaultValue": true
+    },
+    {
+      "name": "dbtester.auto-register-data-sources",
+      "type": "java.lang.Boolean",
+      "description": "Whether to automatically register Spring-managed DataSource beans with the DataSourceRegistry for database testing.",
+      "defaultValue": true
+    }
+  ],
+  "hints": [
+    {
+      "name": "dbtester.enabled",
+      "values": [
+        {
+          "value": true,
+          "description": "Enable DB Tester integration (default)."
+        },
+        {
+          "value": false,
+          "description": "Disable DB Tester integration."
+        }
+      ]
+    },
+    {
+      "name": "dbtester.auto-register-data-sources",
+      "values": [
+        {
+          "value": true,
+          "description": "Automatically register all DataSource beans (default)."
+        },
+        {
+          "value": false,
+          "description": "Manual DataSource registration required."
+        }
+      ]
+    }
+  ]
+}
