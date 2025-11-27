@@ -18,7 +18,9 @@ deploy:
         sign: false
         applyMavenCentralRules: true
         stagingRepositories:
-          - build/staging-deploy
+          - junit-jupiter-db-tester/build/staging-deploy
+          - junit-jupiter-db-tester-bom/build/staging-deploy
+          - junit-jupiter-db-tester-spring-boot-starter/build/staging-deploy
         connectTimeout: 20
         readTimeout: 60
         retryDelay: 20

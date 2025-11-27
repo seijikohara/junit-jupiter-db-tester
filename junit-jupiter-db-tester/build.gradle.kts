@@ -2,7 +2,6 @@ plugins {
     `java-library`
     `maven-publish`
     signing
-    alias(libs.plugins.jreleaser)
     jacoco
 }
 
@@ -95,51 +94,11 @@ publishing {
             pom {
                 name = "JUnit Jupiter DB Tester"
                 description = "A JUnit Jupiter extension for database testing with CSV-based test data management, built on DbUnit"
-                url = "https://github.com/seijikohara/junit-jupiter-db-tester"
-
-                licenses {
-                    license {
-                        name = "MIT License"
-                        url = "https://opensource.org/licenses/MIT"
-                    }
-                }
-
-                developers {
-                    developer {
-                        id = "seijikohara"
-                        name = "Seiji Kohara"
-                        email = "seiji.kohara@gmail.com"
-                    }
-                }
-
-                scm {
-                    connection = "scm:git:git://github.com/seijikohara/junit-jupiter-db-tester.git"
-                    developerConnection = "scm:git:ssh://github.com/seijikohara/junit-jupiter-db-tester.git"
-                    url = "https://github.com/seijikohara/junit-jupiter-db-tester"
-                }
             }
-        }
-    }
-
-    repositories {
-        maven {
-            name = "staging"
-            url = layout.buildDirectory.dir("staging-deploy").get().asFile.toURI()
         }
     }
 }
 
 signing {
-    setRequired {
-        gradle.taskGraph.allTasks.any { it.name.contains("publish") }
-    }
-    // Use gpg-agent for signing
-    useGpgCmd()
     sign(publishing.publications["mavenJava"])
-}
-
-jreleaser {
-    gitRootSearch = true
-    // Use external YAML configuration file
-    configFile = rootProject.file("jreleaser.yml")
 }

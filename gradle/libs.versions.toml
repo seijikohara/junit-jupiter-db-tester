@@ -18,6 +18,8 @@ oracle-ojdbc = "23.26.0.0.0"
 postgresql = "42.7.8"
 slf4j = "2.0.17"
 spotless = "8.1.0"
+spring-boot = "4.0.0"
+spring-dependency-management = "1.1.7"
 testcontainers = "2.0.2"
 version-catalog-update = "1.0.1"
 
@@ -46,6 +48,14 @@ postgresql = { module = "org.postgresql:postgresql", version.ref = "postgresql" 
 slf4j-api = { module = "org.slf4j:slf4j-api" }
 slf4j-bom = { module = "org.slf4j:slf4j-bom", version.ref = "slf4j" }
 slf4j-simple = { module = "org.slf4j:slf4j-simple" }
+spring-boot-autoconfigure = { module = "org.springframework.boot:spring-boot-autoconfigure", version.ref = "spring-boot" }
+spring-boot-configuration-processor = { module = "org.springframework.boot:spring-boot-configuration-processor", version.ref = "spring-boot" }
+spring-boot-starter = { module = "org.springframework.boot:spring-boot-starter", version.ref = "spring-boot" }
+spring-boot-starter-data-jpa = { module = "org.springframework.boot:spring-boot-starter-data-jpa", version.ref = "spring-boot" }
+spring-boot-starter-jdbc = { module = "org.springframework.boot:spring-boot-starter-jdbc", version.ref = "spring-boot" }
+spring-boot-starter-test = { module = "org.springframework.boot:spring-boot-starter-test", version.ref = "spring-boot" }
+spring-boot-test = { module = "org.springframework.boot:spring-boot-test", version.ref = "spring-boot" }
+spring-test = "org.springframework:spring-test:7.0.1"
 testcontainers-bom = { module = "org.testcontainers:testcontainers-bom", version.ref = "testcontainers" }
 testcontainers-junit-jupiter = { module = "org.testcontainers:testcontainers-junit-jupiter" }
 testcontainers-mssqlserver = { module = "org.testcontainers:testcontainers-mssqlserver" }
@@ -58,4 +68,6 @@ axion-release = { id = "pl.allegro.tech.build.axion-release", version.ref = "axi
 errorprone = { id = "net.ltgt.errorprone", version.ref = "errorprone-plugin" }
 jreleaser = { id = "org.jreleaser", version.ref = "jreleaser" }
 spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }
+spring-boot = { id = "org.springframework.boot", version.ref = "spring-boot" }
+spring-dependency-management = { id = "io.spring.dependency-management", version.ref = "spring-dependency-management" }
 version-catalog-update = { id = "nl.littlerobots.version-catalog-update", version.ref = "version-catalog-update" }

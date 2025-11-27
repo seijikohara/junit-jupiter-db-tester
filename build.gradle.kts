@@ -7,6 +7,7 @@ plugins {
     // This approach is required because plugins block cannot be used within subprojects/allprojects blocks
     alias(libs.plugins.axion.release)
     alias(libs.plugins.errorprone) apply false
+    alias(libs.plugins.jreleaser)
     alias(libs.plugins.spotless)
     // Version Catalog Update plugin for managing dependency versions
     alias(libs.plugins.version.catalog.update)
@@ -59,7 +60,7 @@ versionCatalogUpdate {
 }
 
 // Configure Spotless for root project
-extensions.configure<SpotlessExtension> {
+spotless {
     kotlinGradle {
         ktlint()
     }
@@ -71,7 +72,13 @@ allprojects {
     version = rootProject.version
 }
 
+// Java subprojects configuration (excludes BOM which uses java-platform plugin)
 subprojects {
+    // Skip configuration for BOM project (uses java-platform plugin instead of java)
+    if (name == "junit-jupiter-db-tester-bom") {
+        return@subprojects
+    }
+
     // Apply plugins using apply() because plugins {} block cannot be used in subprojects
     // This is a Gradle limitation, not a deprecated pattern
     apply(plugin = "java")
@@ -122,7 +129,7 @@ subprojects {
             allErrorsAsWarnings = false
             disableWarningsInGeneratedCode = false
             check("NullAway", CheckSeverity.ERROR)
-            option("NullAway:AnnotatedPackages", "io.github.seijikohara,example")
+            option("NullAway:AnnotatedPackages", "io.github.seijikohara.dbtester,example")
             option("NullAway:JSpecifyMode", "true")
             option("NullAway:TreatGeneratedAsUnannotated", "true")
             option("NullAway:CheckOptionalEmptiness", "true")
@@ -130,4 +137,63 @@ subprojects {
             option("NullAway:HandleTestAssertionLibraries", "true")
         }
     }
+}
+
+// Common Maven publishing configuration for all subprojects with maven-publish plugin
+subprojects {
+    plugins.withType<MavenPublishPlugin> {
+        configure<PublishingExtension> {
+            publications.withType<MavenPublication> {
+                pom {
+                    url = "https://github.com/seijikohara/junit-jupiter-db-tester"
+
+                    licenses {
+                        license {
+                            name = "MIT License"
+                            url = "https://opensource.org/licenses/MIT"
+                        }
+                    }
+
+                    developers {
+                        developer {
+                            id = "seijikohara"
+                            name = "Seiji Kohara"
+                            email = "seiji.kohara@gmail.com"
+                        }
+                    }
+
+                    scm {
+                        connection = "scm:git:git://github.com/seijikohara/junit-jupiter-db-tester.git"
+                        developerConnection = "scm:git:ssh://github.com/seijikohara/junit-jupiter-db-tester.git"
+                        url = "https://github.com/seijikohara/junit-jupiter-db-tester"
+                    }
+                }
+            }
+
+            repositories {
+                maven {
+                    name = "staging"
+                    url =
+                        layout.buildDirectory
+                            .dir("staging-deploy")
+                            .get()
+                            .asFile
+                            .toURI()
+                }
+            }
+        }
+    }
+
+    plugins.withType<SigningPlugin> {
+        configure<SigningExtension> {
+            setRequired { gradle.taskGraph.allTasks.any { it.name.contains("publish") } }
+            useGpgCmd()
+        }
+    }
+}
+
+// JReleaser configuration for Maven Central deployment
+jreleaser {
+    gitRootSearch = true
+    configFile = file("jreleaser.yml")
 }

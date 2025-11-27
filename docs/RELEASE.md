@@ -1,16 +1,85 @@
 # Release Workflow
 
-This document describes the automated release workflow for `junit-jupiter-db-tester` using axion-release-plugin and JReleaser.
+This document describes the release workflow for JUnit Jupiter DB Tester modules.
 
 ## Overview
 
-The project uses a fully automated release workflow:
+The project supports two release methods:
 
-1. **Version Management**: axion-release-plugin manages versions based on Git tags
-2. **GitHub Release**: JReleaser creates GitHub releases with auto-generated changelogs
-3. **Maven Central**: JReleaser publishes artifacts to Maven Central
+1. **GitHub Actions (Recommended)**: Automated workflow with validation and approval gate
+2. **Local Release**: Manual release from your development machine
 
-## Prerequisites
+### Released Modules
+
+All modules share the same version and are released together:
+
+| Module | Description |
+|--------|-------------|
+| [junit-jupiter-db-tester](../junit-jupiter-db-tester/) | Core library |
+| [junit-jupiter-db-tester-bom](../junit-jupiter-db-tester-bom/) | Bill of Materials |
+| [junit-jupiter-db-tester-spring-boot-starter](../junit-jupiter-db-tester-spring-boot-starter/) | Spring Boot Starter |
+
+---
+
+## Option 1: GitHub Actions Release (Recommended)
+
+The GitHub Actions workflow provides:
+- Version validation (MAJOR.MINOR.PATCH format only)
+- Automatic check that version is newer than existing tags
+- Dry-run mode for testing before actual release
+- Manual approval gate via GitHub Environments
+
+### Prerequisites
+
+See [PUBLISHING.md](PUBLISHING.md) for one-time setup:
+- GitHub Environment (`maven-central`) with required reviewers
+- GitHub Secrets (`GPG_PRIVATE_KEY`, `GPG_PASSPHRASE`, `MAVEN_CENTRAL_USERNAME`, `MAVEN_CENTRAL_TOKEN`)
+
+### Release Process
+
+**Step 1: Dry-Run (Recommended)**
+
+1. Go to **Actions** → **Release** → **Run workflow**
+2. Enter version (e.g., `1.2.0`)
+3. Check **"Dry-run mode"**
+4. Click **"Run workflow"**
+
+This runs:
+- Version format validation
+- Check that version is newer than existing tags
+- Build and test all modules
+- JReleaser dry-run (no actual deployment)
+
+**Step 2: Actual Release**
+
+1. Go to **Actions** → **Release** → **Run workflow**
+2. Enter version (e.g., `1.2.0`)
+3. Leave "Dry-run mode" **unchecked**
+4. Click **"Run workflow"**
+5. Wait for `validate` and `build-and-dry-run` jobs to complete
+6. **Approve** the deployment in the `maven-central` environment
+7. Wait for `release` job to complete
+
+**Operations Performed:**
+- Deploy all modules to Maven Central
+- Create Git tag (`v1.2.0`)
+- Create GitHub Release with auto-generated release notes
+
+### Verify Release
+
+- **GitHub Release**: https://github.com/seijikohara/junit-jupiter-db-tester/releases
+- **Maven Central** (10-30 minutes after release):
+  - Core: https://central.sonatype.com/artifact/io.github.seijikohara/junit-jupiter-db-tester
+  - BOM: https://central.sonatype.com/artifact/io.github.seijikohara/junit-jupiter-db-tester-bom
+  - Starter: https://central.sonatype.com/artifact/io.github.seijikohara/junit-jupiter-db-tester-spring-boot-starter
+
+---
+
+## Option 2: Local Release
+
+For local releases from your development machine.
+
+### Prerequisites
 
 See [PUBLISHING.md](PUBLISHING.md) for detailed setup instructions:
 - Central Portal account and namespace verification
@@ -20,24 +89,24 @@ See [PUBLISHING.md](PUBLISHING.md) for detailed setup instructions:
   - **Required**: `~/.gradle/gradle.properties` with `signing.gnupg.passphrase`
   - **Required**: `~/.jreleaser/config.properties` with Maven Central and GitHub credentials
 
-## Version Management
+### Version Management
 
-### How Versioning Works
+#### How Versioning Works
 
 The project version is automatically derived from Git tags:
 
 - **No tags**: Version is `0.1.0-SNAPSHOT`
-- **Tagged commit**: Version is the tag (e.g., `v1.0.0` → `1.0.0`)
+- **Tagged commit**: Version matches the tag (e.g., `v1.0.0` becomes `1.0.0`)
 - **Commit after tag**: Version is `<next-version>-SNAPSHOT` (e.g., `1.0.1-SNAPSHOT`)
 
-### Check Current Version
+#### Check Current Version
 
 ```bash
 ./gradlew currentVersion
 # Output: Project version: 1.0.0-SNAPSHOT
 ```
 
-### Version Commands
+#### Version Commands
 
 ```bash
 ./gradlew currentVersion                            # Show current version
@@ -47,24 +116,27 @@ The project version is automatically derived from Git tags:
 ./gradlew markNextVersion -Prelease.version=2.0.0  # Mark next version
 ```
 
-## Release Process
-
-### Option 1: Manual Release (Recommended for First Release)
+### Local Release Process
 
 **Step 1: Create Release Tag**
 
 ```bash
-# Create release tag (this will create v1.0.0 and push to remote)
+# Create release tag (e.g., v1.2.0)
 ./gradlew release
-# Or specify version: ./gradlew release -Prelease.version=1.0.0
+# Or specify version: ./gradlew release -Prelease.version=1.2.0
 ```
 
-**Step 2: Build and Stage Artifacts**
+**Step 2: Build and Stage All Modules**
 
 ```bash
 ./gradlew :junit-jupiter-db-tester:clean \
           :junit-jupiter-db-tester:build \
           :junit-jupiter-db-tester:publishAllPublicationsToStagingRepository \
+          :junit-jupiter-db-tester-bom:clean \
+          :junit-jupiter-db-tester-bom:publishAllPublicationsToStagingRepository \
+          :junit-jupiter-db-tester-spring-boot-starter:clean \
+          :junit-jupiter-db-tester-spring-boot-starter:build \
+          :junit-jupiter-db-tester-spring-boot-starter:publishAllPublicationsToStagingRepository \
           --no-configuration-cache
 ```
 
@@ -74,12 +146,12 @@ The project version is automatically derived from Git tags:
 ./gradlew :junit-jupiter-db-tester:jreleaserFullRelease --no-configuration-cache
 ```
 
-This will:
-- ✅ Create GitHub Release with auto-generated changelog
-- ✅ Upload signed artifacts to Maven Central
-- ✅ Automatically publish to Maven Central (no manual approval!)
+This operation:
+- Creates GitHub Release with auto-generated changelog
+- Uploads signed artifacts from all modules to Maven Central
+- Automatically publishes to Maven Central (no manual approval required)
 
-**Note**: This can take 30-45 minutes for the initial deployment validation and publishing.
+**Note**: This can take 30-45 minutes for the deployment validation and publishing.
 
 **Step 4: Verify Release**
 
@@ -88,43 +160,55 @@ This will:
 - Verify changelog and release notes
 
 **Maven Central** (10-30 minutes):
-- Check: `https://central.sonatype.com/artifact/io.github.seijikohara/junit-jupiter-db-tester`
-- Verify version, POM metadata, and signatures
+- Core: `https://central.sonatype.com/artifact/io.github.seijikohara/junit-jupiter-db-tester`
+- BOM: `https://central.sonatype.com/artifact/io.github.seijikohara/junit-jupiter-db-tester-bom`
+- Spring Boot Starter: `https://central.sonatype.com/artifact/io.github.seijikohara/junit-jupiter-db-tester-spring-boot-starter`
 
 **Test Download**:
 ```gradle
 dependencies {
-    testImplementation("io.github.seijikohara:junit-jupiter-db-tester:1.0.0")
+    // Using BOM (recommended)
+    testImplementation platform('io.github.seijikohara:junit-jupiter-db-tester-bom:1.2.0')
+    testImplementation 'io.github.seijikohara:junit-jupiter-db-tester'
+    // Optional: Spring Boot integration
+    testImplementation 'io.github.seijikohara:junit-jupiter-db-tester-spring-boot-starter'
 }
 ```
 
 **Step 5: Update to Next Development Version**
 
-The version automatically becomes `1.0.1-SNAPSHOT` after the tag is created. No manual version updates needed!
+The version automatically becomes the next SNAPSHOT after the tag is created. No manual version updates needed!
 
 ```bash
 ./gradlew currentVersion
-# Output: Project version: 1.0.1-SNAPSHOT
+# Output: Project version: 1.2.1-SNAPSHOT
 ```
 
-### Option 2: Automated Release (One Command)
+#### Automated Release (One Command)
 
 ```bash
 ./gradlew release \
           :junit-jupiter-db-tester:clean \
           :junit-jupiter-db-tester:build \
           :junit-jupiter-db-tester:publishAllPublicationsToStagingRepository \
+          :junit-jupiter-db-tester-bom:clean \
+          :junit-jupiter-db-tester-bom:publishAllPublicationsToStagingRepository \
+          :junit-jupiter-db-tester-spring-boot-starter:clean \
+          :junit-jupiter-db-tester-spring-boot-starter:build \
+          :junit-jupiter-db-tester-spring-boot-starter:publishAllPublicationsToStagingRepository \
           :junit-jupiter-db-tester:jreleaserFullRelease \
           --no-configuration-cache
 ```
 
-⚠️ Use this only after successfully completing at least one manual release.
+**Warning**: Use this approach only after successfully completing at least one step-by-step release.
 
-### Option 3: Dry Run (Testing)
+#### Dry Run (Testing)
 
 ```bash
 ./gradlew :junit-jupiter-db-tester:jreleaserFullRelease --dry-run --no-configuration-cache
 ```
+
+---
 
 ## Changelog Generation
 
@@ -170,7 +254,7 @@ BREAKING CHANGE: DatabaseTestExtension.getRegistry() now returns Optional<DataSo
 
 axion-release-plugin calculates the next version based on the current tag:
 
-- Patch bump (default): `1.0.0` → `1.0.1`
+- Patch bump (default): `1.0.0` to `1.0.1`
 - Minor bump: `./gradlew release -Prelease.versionIncrementer=incrementMinor`
 - Major bump: `./gradlew release -Prelease.versionIncrementer=incrementMajor`
 
@@ -200,11 +284,20 @@ axion-release-plugin calculates the next version based on the current tag:
 ./gradlew release               # Create release tag
 ```
 
-### Publishing
+### Publishing (Per Module)
 
 ```bash
+# Core library
 ./gradlew :junit-jupiter-db-tester:publishToMavenLocal                       # Test locally
 ./gradlew :junit-jupiter-db-tester:publishAllPublicationsToStagingRepository # Stage artifacts
+
+# BOM
+./gradlew :junit-jupiter-db-tester-bom:publishToMavenLocal
+./gradlew :junit-jupiter-db-tester-bom:publishAllPublicationsToStagingRepository
+
+# Spring Boot Starter
+./gradlew :junit-jupiter-db-tester-spring-boot-starter:publishToMavenLocal
+./gradlew :junit-jupiter-db-tester-spring-boot-starter:publishAllPublicationsToStagingRepository
 ```
 
 ### JReleaser
@@ -281,7 +374,12 @@ This is normal for initial deployments, which can take 30-45 minutes. The deploy
 
 - Check credentials in `~/.jreleaser/config.properties`
 - Verify GPG key is available: `gpg --list-keys`
-- Check staging repository: `ls -la junit-jupiter-db-tester/build/staging-deploy/`
+- Check staging repositories:
+  ```bash
+  ls -la junit-jupiter-db-tester/build/staging-deploy/
+  ls -la junit-jupiter-db-tester-bom/build/staging-deploy/
+  ls -la junit-jupiter-db-tester-spring-boot-starter/build/staging-deploy/
+  ```
 - Review JReleaser logs: `junit-jupiter-db-tester/build/jreleaser/trace.log`
 
 For detailed troubleshooting, see [PUBLISHING.md](PUBLISHING.md).
@@ -303,15 +401,20 @@ For detailed troubleshooting, see [PUBLISHING.md](PUBLISHING.md).
 
 # 2. Check current version
 ./gradlew currentVersion
-# Output: Project version: 1.0.0-SNAPSHOT
+# Output: Project version: 1.1.1-SNAPSHOT
 
 # 3. Create release tag (automatically pushes to remote)
 ./gradlew release
 
-# 4. Build and publish to staging
+# 4. Build and publish all modules to staging
 ./gradlew :junit-jupiter-db-tester:clean \
           :junit-jupiter-db-tester:build \
           :junit-jupiter-db-tester:publishAllPublicationsToStagingRepository \
+          :junit-jupiter-db-tester-bom:clean \
+          :junit-jupiter-db-tester-bom:publishAllPublicationsToStagingRepository \
+          :junit-jupiter-db-tester-spring-boot-starter:clean \
+          :junit-jupiter-db-tester-spring-boot-starter:build \
+          :junit-jupiter-db-tester-spring-boot-starter:publishAllPublicationsToStagingRepository \
           --no-configuration-cache
 
 # 5. Create GitHub Release and deploy to Maven Central
@@ -319,9 +422,11 @@ For detailed troubleshooting, see [PUBLISHING.md](PUBLISHING.md).
 
 # 6. Verify on GitHub and Maven Central
 # GitHub: https://github.com/seijikohara/junit-jupiter-db-tester/releases
-# Maven Central: https://central.sonatype.com/artifact/io.github.seijikohara/junit-jupiter-db-tester
+# Maven Central (Core): https://central.sonatype.com/artifact/io.github.seijikohara/junit-jupiter-db-tester
+# Maven Central (BOM): https://central.sonatype.com/artifact/io.github.seijikohara/junit-jupiter-db-tester-bom
+# Maven Central (Starter): https://central.sonatype.com/artifact/io.github.seijikohara/junit-jupiter-db-tester-spring-boot-starter
 
-# 7. Next commits will automatically be 1.0.1-SNAPSHOT
+# 7. Next commits will automatically be 1.2.1-SNAPSHOT
 ```
 
 ## References

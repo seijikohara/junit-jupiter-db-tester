@@ -151,3 +151,10 @@ example/feature/AnnotationConfigurationTest/custom-location/
     ├── TABLE1.csv
     └── TABLE2.csv
 ```
+
+## Related Modules
+
+- [junit-jupiter-db-tester](../junit-jupiter-db-tester/) - Core library
+- [junit-jupiter-db-tester-bom](../junit-jupiter-db-tester-bom/) - Bill of Materials
+- [junit-jupiter-db-tester-spring-boot-starter](../junit-jupiter-db-tester-spring-boot-starter/) - Spring Boot auto-configuration
+- [junit-jupiter-db-tester-spring-boot-starter-example](../junit-jupiter-db-tester-spring-boot-starter-example/) - Spring Boot example project

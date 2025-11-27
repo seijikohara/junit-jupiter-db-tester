@@ -1,5 +1,9 @@
 # Unit Test Requirements
 
+> **SCOPE**: This document applies to **`junit-jupiter-db-tester` core library unit tests ONLY**.
+> For integration tests, see [`junit-jupiter-db-tester-examples`](../../../junit-jupiter-db-tester-examples/).
+> For Spring Boot integration tests, see [`junit-jupiter-db-tester-spring-boot-starter-example`](../../../junit-jupiter-db-tester-spring-boot-starter-example/).
+
 > **CRITICAL**: This document defines guidelines for **unit testing ONLY**, NOT integration testing.
 >
 > For general coding standards (Java style, documentation, error handling, etc.), see [../../AGENTS.md](../../AGENTS.md).
@@ -26,7 +30,7 @@
 
 ### Unit Test vs Integration Test
 
-| Aspect | Unit Test (`lib/src/test/java`) | Integration Test (`example/src/test/java`) |
+| Aspect | Unit Test (`junit-jupiter-db-tester/src/test/java`) | Integration Test (`junit-jupiter-db-tester-examples/src/test/java`) |
 |--------|----------------------------------|-------------------------------------------|
 | **Database** | Always mocked (Mockito) | Real DB (H2/Testcontainers) |
 | **File I/O** | `@TempDir` or mocked | Real files allowed |
@@ -109,7 +113,7 @@ class DataSetLoaderTest {
 
 **Test Class Names**:
 - Pattern: `<ClassName>Test`
-- Example: `DataSetLoader` → `DataSetLoaderTest`
+- Example: `DataSetLoader` becomes `DataSetLoaderTest`
 - Must have class-level Javadoc and `@DisplayName`
 
 **Test Method Names**:
@@ -174,7 +178,7 @@ class DataSetLoaderTest {
 - `"edge-case"`: Boundary conditions, handled exceptions
 - `"error"`: Method throws exception
 - `"slow"`: Tests > 1 second
-- Order tests: normal → edge-case → error
+- Order tests: normal, then edge-case, then error
 
 ### Parameterized Tests
 
@@ -598,7 +602,7 @@ class DataSetLoaderTest {
 Before committing tests:
 
 1. Run `./gradlew spotlessApply`
-2. Run `./gradlew :lib:test` - all tests pass
+2. Run `./gradlew :junit-jupiter-db-tester:test` - all tests pass
 3. All tests < 1 second
 4. No database connections used
 5. All mocks properly configured

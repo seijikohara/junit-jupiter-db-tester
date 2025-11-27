@@ -1,0 +1,234 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (MAJOR.MINOR.PATCH format, e.g., 1.2.0)'
+        required: true
+        type: string
+      dry-run:
+        description: 'Dry-run mode (skip actual deployment)'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  JAVA_VERSION: '21'
+  JAVA_DISTRIBUTION: 'temurin'
+
+jobs:
+  validate:
+    name: Validate Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.validate.outputs.version }}
+      tag: ${{ steps.validate.outputs.tag }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0  # Fetch all history for tag comparison
+
+      - name: Validate version format and check if newer
+        id: validate
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+
+          # Semver regex pattern (MAJOR.MINOR.PATCH only, no pre-release or build metadata)
+          SEMVER_REGEX='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
+
+          # Validate semver format
+          if ! [[ "$VERSION" =~ $SEMVER_REGEX ]]; then
+            echo "::error::Invalid version format: $VERSION"
+            echo "::error::Version must be in MAJOR.MINOR.PATCH format (e.g., 1.2.0)"
+            exit 1
+          fi
+
+          echo "✅ Version format is valid: $VERSION"
+
+          # Check if tag already exists
+          TAG="v$VERSION"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "::error::Tag $TAG already exists"
+            exit 1
+          fi
+
+          echo "✅ Tag $TAG does not exist yet"
+
+          # Get the latest tag and compare versions
+          LATEST_TAG=$(git tag -l 'v*' --sort=-v:refname | head -n 1)
+
+          if [[ -n "$LATEST_TAG" ]]; then
+            LATEST_VERSION="${LATEST_TAG#v}"
+            echo "Latest existing tag: $LATEST_TAG (version: $LATEST_VERSION)"
+
+            # Compare versions using sort -V
+            HIGHER_VERSION=$(printf '%s\n%s' "$LATEST_VERSION" "$VERSION" | sort -V | tail -n 1)
+
+            if [[ "$HIGHER_VERSION" != "$VERSION" ]]; then
+              echo "::error::Version $VERSION is not newer than the latest version $LATEST_VERSION"
+              exit 1
+            fi
+
+            if [[ "$HIGHER_VERSION" == "$LATEST_VERSION" && "$VERSION" == "$LATEST_VERSION" ]]; then
+              echo "::error::Version $VERSION is the same as the latest version"
+              exit 1
+            fi
+
+            echo "✅ Version $VERSION is newer than $LATEST_VERSION"
+          else
+            echo "ℹ️ No existing tags found. This will be the first release."
+          fi
+
+          # Set outputs
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Summary
+        run: |
+          echo "## Version Validation Passed ✅" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version:** ${{ steps.validate.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tag:** ${{ steps.validate.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
+
+  build-and-dry-run:
+    name: Build and Dry-Run
+    needs: validate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v5
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: 'gradle'
+
+      - name: Import GPG key
+        uses: crazy-max/ghaction-import-gpg@v6
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+
+      - name: Set version
+        run: |
+          echo "Setting version to ${{ needs.validate.outputs.version }}"
+          # Override version for this build
+          echo "version=${{ needs.validate.outputs.version }}" > gradle.properties
+
+      - name: Build and test
+        run: ./gradlew clean build
+
+      - name: Publish to staging
+        run: ./gradlew publish
+
+      - name: Verify staging artifacts
+        run: |
+          echo "## Staging Artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          for module in junit-jupiter-db-tester junit-jupiter-db-tester-bom junit-jupiter-db-tester-spring-boot-starter; do
+            if [[ -d "$module/build/staging-deploy" ]]; then
+              echo "### $module" >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+              find "$module/build/staging-deploy" -name "*.pom" -o -name "*.jar" | head -10 >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+
+      - name: JReleaser dry-run
+        run: ./gradlew jreleaserDeploy --dryrun
+        env:
+          JRELEASER_MAVENCENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          JRELEASER_MAVENCENTRAL_TOKEN: ${{ secrets.MAVEN_CENTRAL_TOKEN }}
+
+      - name: Upload staging artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-deploy
+          path: |
+            junit-jupiter-db-tester/build/staging-deploy/
+            junit-jupiter-db-tester-bom/build/staging-deploy/
+            junit-jupiter-db-tester-spring-boot-starter/build/staging-deploy/
+          retention-days: 1
+
+      - name: Dry-run summary
+        run: |
+          echo "## Dry-Run Completed ✅" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "All checks passed. Ready for release approval." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version:** ${{ needs.validate.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tag:** ${{ needs.validate.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
+
+  release:
+    name: Release to Maven Central
+    needs: [validate, build-and-dry-run]
+    runs-on: ubuntu-latest
+    if: ${{ !inputs.dry-run }}
+    environment:
+      name: maven-central
+      url: https://central.sonatype.com/artifact/io.github.seijikohara/junit-jupiter-db-tester
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v5
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: 'gradle'
+
+      - name: Import GPG key
+        uses: crazy-max/ghaction-import-gpg@v6
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+
+      - name: Set version
+        run: |
+          echo "version=${{ needs.validate.outputs.version }}" > gradle.properties
+
+      - name: Build
+        run: ./gradlew clean build
+
+      - name: Publish to staging
+        run: ./gradlew publish
+
+      - name: Deploy to Maven Central
+        run: ./gradlew jreleaserDeploy
+        env:
+          JRELEASER_MAVENCENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          JRELEASER_MAVENCENTRAL_TOKEN: ${{ secrets.MAVEN_CENTRAL_TOKEN }}
+
+      - name: Create and push tag
+        run: |
+          TAG="${{ needs.validate.outputs.tag }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "Release $TAG"
+          git push origin "$TAG"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.validate.outputs.tag }}
+          name: Release ${{ needs.validate.outputs.version }}
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+
+      - name: Release summary
+        run: |
+          echo "## Release Completed 🎉" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version:** ${{ needs.validate.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tag:** ${{ needs.validate.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Maven Central:** https://central.sonatype.com/artifact/io.github.seijikohara/junit-jupiter-db-tester/${{ needs.validate.outputs.version }}" >> $GITHUB_STEP_SUMMARY
