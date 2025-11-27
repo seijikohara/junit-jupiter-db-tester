@@ -31,7 +31,6 @@ testing {
         val test by getting(JvmTestSuite::class) {
             dependencies {
                 implementation(platform(libs.mockito.bom))
-                implementation(libs.bytebuddy)
                 implementation(libs.mockito.core)
                 implementation(libs.mockito.junit.jupiter)
             }
