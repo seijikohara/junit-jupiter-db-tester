@@ -2,10 +2,24 @@ import com.diffplug.gradle.spotless.SpotlessExtension
 import net.ltgt.gradle.errorprone.CheckSeverity
 import net.ltgt.gradle.errorprone.errorprone
 
+// Force JGit version to 5.13.x for JReleaser compatibility
+// JReleaser 1.21.0 requires JGit 5.13.x API (GpgObjectSigner class)
+// which was removed in JGit 7.0.0 (API breaking change)
+// Spotless plugin also depends on JGit but with newer version 7.4.x
+buildscript {
+    configurations.all {
+        resolutionStrategy.eachDependency {
+            if (requested.group == "org.eclipse.jgit") {
+                useVersion("5.13.3.202401111512-r")
+                because("JReleaser 1.21.0 requires JGit 5.13.x API")
+            }
+        }
+    }
+}
+
 plugins {
     // Apply plugins to subprojects using `apply false` and then apply them explicitly in subprojects
     // This approach is required because plugins block cannot be used within subprojects/allprojects blocks
-    alias(libs.plugins.axion.release)
     alias(libs.plugins.errorprone) apply false
     alias(libs.plugins.jreleaser)
     alias(libs.plugins.spotless)
@@ -15,43 +29,9 @@ plugins {
 
 group = "io.github.seijikohara"
 
-// Configure version management with axion-release-plugin
-scmVersion {
-    // Use semantic versioning - always use the highest version from tags
-    useHighestVersion = true
-
-    // Tag configuration
-    tag {
-        // Tag prefix (e.g., v1.0.0)
-        prefix = "v"
-        // No separator between prefix and version
-        versionSeparator = ""
-    }
-
-    // Version creator - simple semantic versioning
-    versionCreator("simple")
-
-    // Snapshot suffix for development versions
-    snapshotCreator { version, _ ->
-        "$version-SNAPSHOT"
-    }
-
-    // Repository configuration
-    repository {
-        // Push both commits and tags (not just tags)
-        pushTagsOnly = false
-    }
-
-    // Checks before release
-    checks {
-        // Allow uncommitted changes (set to true to enforce clean state)
-        uncommittedChanges = false
-        // Allow release even if not ahead of remote
-        aheadOfRemote = false
-    }
-}
-
-version = scmVersion.version
+// Version is managed via gradle.properties file
+// For releases, GitHub Actions workflow or command line overrides the version:
+//   ./gradlew build -Pversion=1.0.0
 
 // Configure version catalog update plugin
 versionCatalogUpdate {
