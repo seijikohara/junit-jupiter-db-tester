@@ -98,11 +98,6 @@ subprojects {
         }
     }
 
-    // Configure dependencies
-    configurations.configureEach {
-        resolutionStrategy.force(rootProject.libs.guava.get())
-    }
-
     dependencies {
         "compileOnly"(rootProject.libs.checker.qual)
         "testCompileOnly"(rootProject.libs.checker.qual)
@@ -129,10 +124,10 @@ subprojects {
             check("NullAway", CheckSeverity.ERROR)
             option("NullAway:AnnotatedPackages", "io.github.seijikohara,example")
             option("NullAway:JSpecifyMode", "true")
-            option("NullAway:AcknowledgeArrayElementNullness", "true")
             option("NullAway:TreatGeneratedAsUnannotated", "true")
             option("NullAway:CheckOptionalEmptiness", "true")
-            option("NullAway:SuggestSuppressions", "false")
+            option("NullAway:CheckContracts", "true")
+            option("NullAway:HandleTestAssertionLibraries", "true")
         }
     }
 }

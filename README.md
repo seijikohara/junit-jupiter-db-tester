@@ -68,19 +68,23 @@ src/test/resources/com/example/UserServiceTest/
 **USERS.csv:**
 ```csv
 [Scenario],ID,NAME,EMAIL
-testCreateUser,1,Alice,alice@example.com
-testCreateUser,2,Bob,bob@example.com
+,1,Admin,admin@example.com
+testCreateUser,2,Alice,alice@example.com
+testCreateUser,3,Bob,bob@example.com
 ```
 
 **expected/USERS.csv:**
 ```csv
 [Scenario],ID,NAME,EMAIL
-testCreateUser,1,Alice,alice@example.com
-testCreateUser,2,Bob,bob@example.com
-testCreateUser,3,Charlie,charlie@example.com
+,1,Admin,admin@example.com
+testCreateUser,2,Alice,alice@example.com
+testCreateUser,3,Bob,bob@example.com
+testCreateUser,4,Charlie,charlie@example.com
 ```
 
 The framework automatically loads rows matching the test method name and validates the database state after test execution.
+
+> **Note:** Rows with an empty `[Scenario]` value are treated as **common data** and included in all test scenarios. This is useful for master data or reference data shared across multiple tests.
 
 ## Core Concepts
 
