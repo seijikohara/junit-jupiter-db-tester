@@ -11,7 +11,7 @@ on:
         description: 'Dry-run mode (skip actual deployment)'
         required: false
         type: boolean
-        default: false
+        default: true
 
 env:
   JAVA_VERSION: '21'
