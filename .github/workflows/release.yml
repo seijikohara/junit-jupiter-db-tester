@@ -19,11 +19,11 @@ env:
 
 jobs:
   validate:
-    name: Validate Version
+    name: Validate
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.validate.outputs.version }}
-      tag: ${{ steps.validate.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
 
     steps:
       - name: Checkout repository
@@ -31,40 +31,38 @@ jobs:
         with:
           fetch-depth: 0  # Fetch all history for tag comparison
 
-      - name: Validate version format and check if newer
-        id: validate
+      - name: Validate version format
         run: |
           VERSION="${{ github.event.inputs.version }}"
-
-          # Semver regex pattern (MAJOR.MINOR.PATCH only, no pre-release or build metadata)
           SEMVER_REGEX='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
 
-          # Validate semver format
           if ! [[ "$VERSION" =~ $SEMVER_REGEX ]]; then
             echo "::error::Invalid version format: $VERSION"
             echo "::error::Version must be in MAJOR.MINOR.PATCH format (e.g., 1.2.0)"
             exit 1
           fi
-
           echo "✅ Version format is valid: $VERSION"
 
-          # Check if tag already exists
-          TAG="v$VERSION"
+      - name: Check tag does not exist
+        run: |
+          TAG="v${{ github.event.inputs.version }}"
           if git rev-parse "$TAG" >/dev/null 2>&1; then
             echo "::error::Tag $TAG already exists"
             exit 1
           fi
-
           echo "✅ Tag $TAG does not exist yet"
 
-          # Get the latest tag and compare versions
+      - name: Validate version is newer
+        id: version
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          TAG="v$VERSION"
           LATEST_TAG=$(git tag -l 'v*' --sort=-v:refname | head -n 1)
 
           if [[ -n "$LATEST_TAG" ]]; then
             LATEST_VERSION="${LATEST_TAG#v}"
             echo "Latest existing tag: $LATEST_TAG (version: $LATEST_VERSION)"
 
-            # Compare versions using sort -V
             HIGHER_VERSION=$(printf '%s\n%s' "$LATEST_VERSION" "$VERSION" | sort -V | tail -n 1)
 
             if [[ "$HIGHER_VERSION" != "$VERSION" ]]; then
@@ -82,16 +80,80 @@ jobs:
             echo "ℹ️ No existing tags found. This will be the first release."
           fi
 
-          # Set outputs
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
+      - name: Validate GPG key
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
+        run: |
+          # Check if secrets are set
+          if [[ -z "$GPG_PRIVATE_KEY" ]]; then
+            echo "::error::GPG_PRIVATE_KEY secret is not set"
+            exit 1
+          fi
+          if [[ -z "$GPG_PASSPHRASE" ]]; then
+            echo "::error::GPG_PASSPHRASE secret is not set"
+            exit 1
+          fi
+          if [[ -z "$GPG_KEY_ID" ]]; then
+            echo "::error::GPG_KEY_ID secret is not set"
+            exit 1
+          fi
+          echo "✅ All GPG secrets are configured"
+
+          # Try to import the key
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --import 2>&1 || {
+            echo "::error::Failed to import GPG private key. Check GPG_PRIVATE_KEY format (should be ASCII armor)."
+            exit 1
+          }
+          echo "✅ GPG key imported successfully"
+
+          # Verify key ID exists
+          if ! gpg --list-secret-keys "$GPG_KEY_ID" >/dev/null 2>&1; then
+            echo "::error::GPG_KEY_ID ($GPG_KEY_ID) does not match imported key"
+            echo "Available keys:"
+            gpg --list-secret-keys --keyid-format SHORT
+            exit 1
+          fi
+          echo "✅ GPG key ID verified: $GPG_KEY_ID"
+
+          # Test signing with passphrase
+          echo "test" | gpg --batch --yes --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" \
+            --local-user "$GPG_KEY_ID" --armor --detach-sign >/dev/null 2>&1 || {
+            echo "::error::Failed to sign with GPG key. Check GPG_PASSPHRASE."
+            exit 1
+          }
+          echo "✅ GPG signing test passed"
+
+      - name: Validate Maven Central credentials
+        env:
+          MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          MAVEN_CENTRAL_TOKEN: ${{ secrets.MAVEN_CENTRAL_TOKEN }}
+        run: |
+          if [[ -z "$MAVEN_CENTRAL_USERNAME" ]]; then
+            echo "::error::MAVEN_CENTRAL_USERNAME secret is not set"
+            exit 1
+          fi
+          if [[ -z "$MAVEN_CENTRAL_TOKEN" ]]; then
+            echo "::error::MAVEN_CENTRAL_TOKEN secret is not set"
+            exit 1
+          fi
+          echo "✅ Maven Central credentials are configured"
+
       - name: Summary
         run: |
-          echo "## Version Validation Passed ✅" >> $GITHUB_STEP_SUMMARY
+          echo "## Validation Passed ✅" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **Version:** ${{ steps.validate.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Tag:** ${{ steps.validate.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "### Version" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version:** ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tag:** ${{ steps.version.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Credentials" >> $GITHUB_STEP_SUMMARY
+          echo "- **GPG Key:** ✅ Verified" >> $GITHUB_STEP_SUMMARY
+          echo "- **Maven Central:** ✅ Configured" >> $GITHUB_STEP_SUMMARY
 
   build-and-dry-run:
     name: Build and Dry-Run
