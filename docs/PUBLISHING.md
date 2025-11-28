@@ -145,25 +145,10 @@ The recommended way to release is using the GitHub Actions workflow, which provi
    | Secret | Description |
    |--------|-------------|
    | `GPG_PRIVATE_KEY` | GPG private key (ASCII armor format: `gpg --armor --export-secret-keys KEY_ID`) |
-   | `GPG_SIGNING_KEY` | GPG signing key for Gradle (base64 format without headers, see below) |
    | `GPG_PASSPHRASE` | GPG key passphrase |
    | `GPG_KEY_ID` | GPG key ID (short format, e.g., `ABCD1234`) |
    | `MAVEN_CENTRAL_USERNAME` | Maven Central username from step 2 |
    | `MAVEN_CENTRAL_TOKEN` | Maven Central token from step 2 |
-
-   **Generating `GPG_SIGNING_KEY`**:
-
-   The `GPG_SIGNING_KEY` must be in base64 format without ASCII armor headers/footers.
-   Generate it using the following command:
-
-   ```bash
-   gpg --export-secret-keys --armor KEY_ID | grep -v '\-\-' | grep -v '^=.' | tr -d '\n'
-   ```
-
-   This removes the `-----BEGIN/END PGP PRIVATE KEY BLOCK-----` headers, checksum line,
-   and all newlines to produce a single continuous base64 string.
-
-   Reference: [gradle-maven-publish-plugin#331](https://github.com/vanniktech/gradle-maven-publish-plugin/issues/331)
 
 ### Release Steps
 
