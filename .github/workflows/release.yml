@@ -111,13 +111,16 @@ jobs:
           java-version: ${{ env.JAVA_VERSION }}
           cache: 'gradle'
 
+      - name: Create local tag
+        run: git tag ${{ needs.validate.outputs.tag }}
+
       - name: Build and test with release version
-        run: ./gradlew clean build -Prelease.forceVersion=${{ needs.validate.outputs.version }}
+        run: ./gradlew clean build
 
       - name: Verify version
         run: |
-          echo "Building with version: ${{ needs.validate.outputs.version }}"
-          ./gradlew currentVersion -Prelease.forceVersion=${{ needs.validate.outputs.version }}
+          echo "Expected version: ${{ needs.validate.outputs.version }}"
+          ./gradlew currentVersion
 
       - name: Dry-run summary
         run: |
@@ -161,11 +164,14 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+      - name: Create local tag
+        run: git tag ${{ needs.validate.outputs.tag }}
+
       - name: Build with release version
-        run: ./gradlew clean build -Prelease.forceVersion=${{ needs.validate.outputs.version }}
+        run: ./gradlew clean build
 
       - name: Publish to Maven Central
-        run: ./gradlew publishAndReleaseToMavenCentral -Prelease.forceVersion=${{ needs.validate.outputs.version }} --no-configuration-cache
+        run: ./gradlew publishAndReleaseToMavenCentral --no-configuration-cache
         env:
           ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
           ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_TOKEN }}
@@ -173,11 +179,8 @@ jobs:
           ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.GPG_PASSPHRASE }}
           ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.GPG_PRIVATE_KEY }}
 
-      - name: Create Git tag
-        run: ./gradlew createRelease -Prelease.version=${{ needs.validate.outputs.version }}
-        env:
-          # Required for pushing tags
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Push tag
+        run: git push origin ${{ needs.validate.outputs.tag }}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
