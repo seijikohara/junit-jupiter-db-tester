@@ -232,6 +232,23 @@ jobs:
       - name: Build with release version
         run: ./gradlew clean build
 
+      - name: Prepare GPG signing key
+        id: gpg-signing-key
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        run: |
+          # Convert ASCII armor format to base64 without headers/footers/newlines
+          # Required by vanniktech/gradle-maven-publish-plugin's signingInMemoryKey
+          # Reference: https://github.com/vanniktech/gradle-maven-publish-plugin/issues/331
+          # Reference: https://simonscholz.dev/tutorials/publish-maven-central-gradle/
+          SIGNING_KEY=$(printf '%s' "$GPG_PRIVATE_KEY" | grep -v '\-\-' | grep -v '^=.' | tr -d '\n')
+          echo "::add-mask::$SIGNING_KEY"
+          {
+            echo 'signing-key<<EOF'
+            echo "$SIGNING_KEY"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
       - name: Publish to Maven Central
         run: ./gradlew publishAndReleaseToMavenCentral --no-configuration-cache
         env:
@@ -239,7 +256,7 @@ jobs:
           ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_TOKEN }}
           ORG_GRADLE_PROJECT_signingInMemoryKeyId: ${{ secrets.GPG_KEY_ID }}
           ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.GPG_PASSPHRASE }}
-          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.GPG_SIGNING_KEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ steps.gpg-signing-key.outputs.signing-key }}
 
       - name: Push tag
         run: git push origin ${{ needs.validate.outputs.tag }}
