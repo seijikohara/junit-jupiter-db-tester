@@ -78,7 +78,7 @@ This runs:
 
 **Operations Performed:**
 - Deploy all modules to Maven Central
-- Create Git tag (`v1.2.0`) via axion-release-plugin
+- Push Git tag (`v1.2.0`)
 - Create GitHub Release with auto-generated release notes
 
 ### Verify Release
@@ -115,46 +115,52 @@ See [PUBLISHING.md](PUBLISHING.md) for detailed setup instructions:
 git tag -l 'v*' --sort=-v:refname
 ```
 
-**Step 2: Build and Test**
+**Step 2: Create Local Tag**
 
-Build with the release version (replace `1.2.0` with your target version):
+Create a local tag for the release version. This allows axion-release-plugin to recognize the release version (without SNAPSHOT suffix):
 
 ```bash
-./gradlew clean build -Prelease.forceVersion=1.2.0
+git tag v1.2.0
 ```
 
-**Step 3: Publish to Maven Central**
+**Step 3: Build and Test**
+
+Build with the release version:
 
 ```bash
-./gradlew publishAndReleaseToMavenCentral -Prelease.forceVersion=1.2.0 --no-configuration-cache
+./gradlew clean build
+
+# Verify the version is correct (should show 1.2.0, not 1.2.0-SNAPSHOT)
+./gradlew currentVersion
+```
+
+**Step 4: Publish to Maven Central**
+
+```bash
+./gradlew publishAndReleaseToMavenCentral --no-configuration-cache
 ```
 
 This uploads signed artifacts from all modules to Maven Central and automatically releases them.
 
 **Note**: This can take several minutes for the deployment validation and publishing.
 
-**Step 4: Create Git Tag**
+**Step 5: Push Git Tag**
 
-Use axion-release-plugin to create and push the tag:
-
-```bash
-./gradlew createRelease -Prelease.version=1.2.0
-```
-
-Or manually:
+After successful publish, push the tag to remote:
 
 ```bash
-git tag -a v1.2.0 -m "Release v1.2.0"
 git push origin v1.2.0
 ```
 
-**Step 5: Create GitHub Release**
+**Important**: Push the tag only after successful publish. If publish fails, delete the local tag with `git tag -d v1.2.0` and retry.
+
+**Step 6: Create GitHub Release**
 
 ```bash
 gh release create v1.2.0 --title "Release 1.2.0" --generate-notes
 ```
 
-**Step 6: Verify Release**
+**Step 7: Verify Release**
 
 **GitHub Release** (immediate):
 - Visit: `https://github.com/seijikohara/junit-jupiter-db-tester/releases`
@@ -231,19 +237,18 @@ Version is determined manually following [Semantic Versioning](https://semver.or
 ### Version Management (axion-release-plugin)
 
 ```bash
-./gradlew currentVersion                              # Show current version
-./gradlew currentVersion -Prelease.forceVersion=1.2.0 # Show forced version
-./gradlew createRelease -Prelease.version=1.2.0       # Create and push tag
+./gradlew currentVersion    # Show current version (derived from Git tags)
 ```
 
 ### Publishing
 
 ```bash
 # Publish to Maven Central (all modules)
-./gradlew publishAndReleaseToMavenCentral -Prelease.forceVersion=1.2.0 --no-configuration-cache
+# Note: Create local tag first to get release version
+./gradlew publishAndReleaseToMavenCentral --no-configuration-cache
 
 # Publish to local Maven repository (for testing)
-./gradlew publishToMavenLocal -Prelease.forceVersion=1.2.0
+./gradlew publishToMavenLocal
 ```
 
 ## Troubleshooting
@@ -312,16 +317,22 @@ For detailed troubleshooting, see [PUBLISHING.md](PUBLISHING.md).
 ./gradlew currentVersion
 git tag -l 'v*' --sort=-v:refname | head -5
 
-# 3. Publish to Maven Central (replace 1.2.0 with your version)
-./gradlew publishAndReleaseToMavenCentral -Prelease.forceVersion=1.2.0 --no-configuration-cache
+# 3. Create local tag (replace 1.2.0 with your version)
+git tag v1.2.0
 
-# 4. Create Git tag
-./gradlew createRelease -Prelease.version=1.2.0
+# 4. Verify version is correct (should show 1.2.0, not SNAPSHOT)
+./gradlew currentVersion
 
-# 5. Create GitHub Release
+# 5. Publish to Maven Central
+./gradlew publishAndReleaseToMavenCentral --no-configuration-cache
+
+# 6. Push tag to remote (only after successful publish)
+git push origin v1.2.0
+
+# 7. Create GitHub Release
 gh release create v1.2.0 --title "Release 1.2.0" --generate-notes
 
-# 6. Verify on GitHub and Maven Central
+# 8. Verify on GitHub and Maven Central
 # GitHub: https://github.com/seijikohara/junit-jupiter-db-tester/releases
 # Maven Central (Core): https://central.sonatype.com/artifact/io.github.seijikohara/junit-jupiter-db-tester
 # Maven Central (BOM): https://central.sonatype.com/artifact/io.github.seijikohara/junit-jupiter-db-tester-bom
