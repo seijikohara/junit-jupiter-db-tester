@@ -1,7 +1,9 @@
+import com.vanniktech.maven.publish.JavaLibrary
+import com.vanniktech.maven.publish.JavadocJar
+
 plugins {
     `java-library`
-    `maven-publish`
-    signing
+    alias(libs.plugins.maven.publish)
 }
 
 dependencies {
@@ -45,11 +47,6 @@ testing {
     }
 }
 
-java {
-    withSourcesJar()
-    withJavadocJar()
-}
-
 tasks {
     withType<JavaCompile>().configureEach {
         // Suppress warning about unprocessed annotations from Spring Boot
@@ -80,19 +77,14 @@ tasks {
     }
 }
 
-publishing {
-    publications {
-        create<MavenPublication>("mavenJava") {
-            from(components["java"])
+mavenPublishing {
+    configure(JavaLibrary(
+        javadocJar = JavadocJar.Javadoc(),
+        sourcesJar = true
+    ))
 
-            pom {
-                name = "JUnit Jupiter DB Tester Spring Boot Starter"
-                description = "Spring Boot Starter for JUnit Jupiter DB Tester"
-            }
-        }
+    pom {
+        name = "JUnit Jupiter DB Tester Spring Boot Starter"
+        description = "Spring Boot Starter for JUnit Jupiter DB Tester"
     }
-}
-
-signing {
-    sign(publishing.publications["mavenJava"])
 }

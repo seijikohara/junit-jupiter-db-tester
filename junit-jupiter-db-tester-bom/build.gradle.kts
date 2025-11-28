@@ -1,7 +1,8 @@
+import com.vanniktech.maven.publish.JavaPlatform
+
 plugins {
     `java-platform`
-    `maven-publish`
-    signing
+    alias(libs.plugins.maven.publish)
 }
 
 javaPlatform {
@@ -15,19 +16,11 @@ dependencies {
     }
 }
 
-publishing {
-    publications {
-        create<MavenPublication>("mavenBom") {
-            from(components["javaPlatform"])
+mavenPublishing {
+    configure(JavaPlatform())
 
-            pom {
-                name = "JUnit Jupiter DB Tester BOM"
-                description = "Bill of Materials for JUnit Jupiter DB Tester"
-            }
-        }
+    pom {
+        name = "JUnit Jupiter DB Tester BOM"
+        description = "Bill of Materials for JUnit Jupiter DB Tester"
     }
-}
-
-signing {
-    sign(publishing.publications["mavenBom"])
 }

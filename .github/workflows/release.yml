@@ -101,6 +101,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0  # Required for axion-release-plugin
 
       - name: Set up JDK ${{ env.JAVA_VERSION }}
         uses: actions/setup-java@v5
@@ -109,53 +111,13 @@ jobs:
           java-version: ${{ env.JAVA_VERSION }}
           cache: 'gradle'
 
-      - name: Import GPG key
-        uses: crazy-max/ghaction-import-gpg@v6
-        with:
-          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
-          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+      - name: Build and test with release version
+        run: ./gradlew clean build -Prelease.forceVersion=${{ needs.validate.outputs.version }}
 
-      - name: Set version
+      - name: Verify version
         run: |
-          echo "Setting version to ${{ needs.validate.outputs.version }}"
-          # Override version for this build
-          echo "version=${{ needs.validate.outputs.version }}" > gradle.properties
-
-      - name: Build and test
-        run: ./gradlew clean build
-
-      - name: Publish to staging
-        run: ./gradlew publish
-
-      - name: Verify staging artifacts
-        run: |
-          echo "## Staging Artifacts" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-
-          for module in junit-jupiter-db-tester junit-jupiter-db-tester-bom junit-jupiter-db-tester-spring-boot-starter; do
-            if [[ -d "$module/build/staging-deploy" ]]; then
-              echo "### $module" >> $GITHUB_STEP_SUMMARY
-              echo '```' >> $GITHUB_STEP_SUMMARY
-              find "$module/build/staging-deploy" -name "*.pom" -o -name "*.jar" | head -10 >> $GITHUB_STEP_SUMMARY
-              echo '```' >> $GITHUB_STEP_SUMMARY
-            fi
-          done
-
-      - name: JReleaser dry-run
-        run: ./gradlew jreleaserDeploy --dryrun
-        env:
-          JRELEASER_MAVENCENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
-          JRELEASER_MAVENCENTRAL_TOKEN: ${{ secrets.MAVEN_CENTRAL_TOKEN }}
-
-      - name: Upload staging artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: staging-deploy
-          path: |
-            junit-jupiter-db-tester/build/staging-deploy/
-            junit-jupiter-db-tester-bom/build/staging-deploy/
-            junit-jupiter-db-tester-spring-boot-starter/build/staging-deploy/
-          retention-days: 1
+          echo "Building with version: ${{ needs.validate.outputs.version }}"
+          ./gradlew currentVersion -Prelease.forceVersion=${{ needs.validate.outputs.version }}
 
       - name: Dry-run summary
         run: |
@@ -178,6 +140,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0  # Required for axion-release-plugin
 
       - name: Set up JDK ${{ env.JAVA_VERSION }}
         uses: actions/setup-java@v5
@@ -192,29 +156,28 @@ jobs:
           gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
           passphrase: ${{ secrets.GPG_PASSPHRASE }}
 
-      - name: Set version
+      - name: Configure Git
         run: |
-          echo "version=${{ needs.validate.outputs.version }}" > gradle.properties
-
-      - name: Build
-        run: ./gradlew clean build
-
-      - name: Publish to staging
-        run: ./gradlew publish
-
-      - name: Deploy to Maven Central
-        run: ./gradlew jreleaserDeploy
-        env:
-          JRELEASER_MAVENCENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
-          JRELEASER_MAVENCENTRAL_TOKEN: ${{ secrets.MAVEN_CENTRAL_TOKEN }}
-
-      - name: Create and push tag
-        run: |
-          TAG="${{ needs.validate.outputs.tag }}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "$TAG" -m "Release $TAG"
-          git push origin "$TAG"
+
+      - name: Build with release version
+        run: ./gradlew clean build -Prelease.forceVersion=${{ needs.validate.outputs.version }}
+
+      - name: Publish to Maven Central
+        run: ./gradlew publishAndReleaseToMavenCentral -Prelease.forceVersion=${{ needs.validate.outputs.version }} --no-configuration-cache
+        env:
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_TOKEN }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyId: ${{ secrets.GPG_KEY_ID }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.GPG_PASSPHRASE }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.GPG_PRIVATE_KEY }}
+
+      - name: Create Git tag
+        run: ./gradlew createRelease -Prelease.version=${{ needs.validate.outputs.version }}
+        env:
+          # Required for pushing tags
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

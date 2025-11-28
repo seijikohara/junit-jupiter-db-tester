@@ -1,6 +1,6 @@
 # Publishing to Maven Central
 
-This document describes how to publish JUnit Jupiter DB Tester modules to Maven Central using the Central Portal and JReleaser.
+This document describes how to publish JUnit Jupiter DB Tester modules to Maven Central using the gradle-maven-publish-plugin.
 
 ## Published Modules
 
@@ -13,6 +13,22 @@ The following modules are published to Maven Central:
 | [junit-jupiter-db-tester-spring-boot-starter](../junit-jupiter-db-tester-spring-boot-starter/) | `junit-jupiter-db-tester-spring-boot-starter` | Spring Boot Starter |
 
 All modules share the same version and are released together.
+
+## Version Management
+
+This project uses [axion-release-plugin](https://github.com/allegro/axion-release-plugin) for version management:
+
+- **Version source**: Git tags (e.g., `v1.2.0` → version `1.2.0`)
+- **Snapshot versions**: Automatically derived from latest tag + commits
+- **No gradle.properties version**: Version is always derived from Git
+
+```bash
+# Check current version
+./gradlew currentVersion
+
+# Force a specific version for build/publish
+./gradlew build -Prelease.forceVersion=1.2.0
+```
 
 ## Prerequisites
 
@@ -73,28 +89,30 @@ echo "test" | gpg --clearsign
 **Required**: Create or update `~/.gradle/gradle.properties`:
 
 ```properties
-# GPG passphrase for Gradle signing plugin (required for non-interactive signing)
-signing.gnupg.passphrase=your-gpg-passphrase-from-step-3
-```
-
-**Required**: Create or update `~/.jreleaser/config.properties`:
-
-```properties
 # Maven Central Portal credentials
-JRELEASER_MAVENCENTRAL_SONATYPE_USERNAME=your-username-from-step-2
-JRELEASER_MAVENCENTRAL_SONATYPE_PASSWORD=your-password-token-from-step-2
+mavenCentralUsername=your-username-from-step-2
+mavenCentralPassword=your-password-token-from-step-2
 
-# GitHub Personal Access Token (for gh CLI, optional for manual release creation)
-# Create token at: https://github.com/settings/tokens
-# Scopes needed: repo, workflow
-JRELEASER_GITHUB_TOKEN=your-github-personal-access-token
+# GPG signing configuration (choose one method)
+
+# Option 1: Use GPG agent (recommended for local development)
+signing.gnupg.keyName=ABCD1234
+signing.gnupg.passphrase=your-gpg-passphrase
+
+# Option 2: In-memory key (recommended for CI)
+# signing.keyId=ABCD1234
+# signing.password=your-gpg-passphrase
+# signing.secretKeyRingFile=/path/to/secring.gpg
 ```
 
-**Alternative**: Set as environment variables:
+**Alternative**: Set as environment variables (for CI):
 
 ```bash
-export JRELEASER_MAVENCENTRAL_SONATYPE_USERNAME="your-username"
-export JRELEASER_MAVENCENTRAL_SONATYPE_PASSWORD="your-token"
+export ORG_GRADLE_PROJECT_mavenCentralUsername="your-username"
+export ORG_GRADLE_PROJECT_mavenCentralPassword="your-token"
+export ORG_GRADLE_PROJECT_signingInMemoryKeyId="ABCD1234"
+export ORG_GRADLE_PROJECT_signingInMemoryKeyPassword="your-passphrase"
+export ORG_GRADLE_PROJECT_signingInMemoryKey="$(gpg --armor --export-secret-keys ABCD1234)"
 ```
 
 ## Publishing Process
@@ -128,8 +146,9 @@ The recommended way to release is using the GitHub Actions workflow, which provi
    |--------|-------------|
    | `GPG_PRIVATE_KEY` | GPG private key (ASCII armor format: `gpg --armor --export-secret-keys KEY_ID`) |
    | `GPG_PASSPHRASE` | GPG key passphrase |
-   | `MAVEN_CENTRAL_USERNAME` | Same as `JRELEASER_MAVENCENTRAL_USERNAME` in `~/.jreleaser/config.properties` |
-   | `MAVEN_CENTRAL_TOKEN` | Same as `JRELEASER_MAVENCENTRAL_TOKEN` in `~/.jreleaser/config.properties` |
+   | `GPG_KEY_ID` | GPG key ID (short format, e.g., `ABCD1234`) |
+   | `MAVEN_CENTRAL_USERNAME` | Maven Central username from step 2 |
+   | `MAVEN_CENTRAL_TOKEN` | Maven Central token from step 2 |
 
 ### Release Steps
 
@@ -140,7 +159,7 @@ The recommended way to release is using the GitHub Actions workflow, which provi
 3. Check "Dry-run mode"
 4. Click "Run workflow"
 
-This validates the version, builds, tests, and runs JReleaser dry-run without creating tags or publishing.
+This validates the version, builds, and tests without creating tags or publishing.
 
 **Step 2: Run Actual Release**
 
@@ -155,7 +174,7 @@ This validates the version, builds, tests, and runs JReleaser dry-run without cr
 - Version validation
 - Build and test all modules
 - Deploy to Maven Central
-- Create Git tag (e.g., `v1.2.0`)
+- Create Git tag (e.g., `v1.2.0`) via axion-release-plugin
 - Create GitHub Release with auto-generated notes
 
 ### Verify Release
@@ -175,8 +194,8 @@ For local releases from your development machine, follow the steps below.
 # Ensure all changes are committed
 git status
 
-# Check existing tags to determine next version
-git tag -l 'v*' --sort=-v:refname | head -5
+# Check current version (derived from Git tags)
+./gradlew currentVersion
 
 # Run all tests
 ./gradlew clean build test
@@ -196,52 +215,41 @@ git tag -l 'v*' --sort=-v:refname
 # - MAJOR (1.0.0 -> 2.0.0): Breaking changes
 ```
 
-### Step 3: Build and Stage All Modules
+### Step 3: Build and Publish
 
-Build and stage all publishable modules with the release version (replace `1.2.0` with your target version):
+Build and publish all modules with the release version (replace `1.2.0` with your target version):
 
 ```bash
-# Clean build with signatures for all modules
-./gradlew clean build publish -Pversion=1.2.0 --no-configuration-cache
+# Publish to Maven Central (all modules)
+./gradlew publishAndReleaseToMavenCentral -Prelease.forceVersion=1.2.0 --no-configuration-cache
 ```
 
-This generates for each module:
-- Main JAR (or POM for BOM)
-- Sources JAR (except BOM)
-- Javadoc JAR (except BOM)
-- POM file
-- GPG signatures (`.asc` files)
-- Checksums (MD5, SHA-1, SHA-256, SHA-512)
+This:
+- Builds all modules
+- Signs all artifacts with GPG
+- Uploads to Maven Central
+- Automatically releases (no manual staging repository approval required)
 
-Artifacts are staged in each module's `build/staging-deploy/` directory.
+**Note**: This can take several minutes for the deployment validation and publishing.
 
-### Step 4: Deploy to Maven Central
+### Step 4: Create Git Tag
+
+Use axion-release-plugin to create and push the tag:
 
 ```bash
-# Deploy all modules to Maven Central
-./gradlew jreleaserDeploy -Pversion=1.2.0 --no-configuration-cache
+./gradlew createRelease -Prelease.version=1.2.0
 ```
 
-**Operations performed:**
-1. Uploads artifacts from all staging directories to Central Portal
-2. Validates artifacts against Maven Central requirements
-3. Automatically publishes to Maven Central (no manual approval required)
-
-**Note**: This can take 30-45 minutes for the deployment validation and publishing.
-
-**Dry run** (testing only):
-```bash
-./gradlew jreleaserDeploy -Pversion=1.2.0 --dry-run --no-configuration-cache
-```
-
-### Step 5: Create Git Tag and GitHub Release
+Or manually:
 
 ```bash
-# Create and push tag
 git tag -a v1.2.0 -m "Release v1.2.0"
 git push origin v1.2.0
+```
 
-# Create GitHub Release (using gh CLI)
+### Step 5: Create GitHub Release
+
+```bash
 gh release create v1.2.0 --title "Release 1.2.0" --generate-notes
 ```
 
@@ -267,57 +275,32 @@ dependencies {
 }
 ```
 
-## Alternative Workflows
-
-### Quick Release (All-in-One)
-
-```bash
-# Build, publish, and deploy in one command (replace 1.2.0 with your version)
-./gradlew clean build publish jreleaserDeploy -Pversion=1.2.0 --no-configuration-cache
-
-# Then create Git tag and GitHub Release manually
-git tag -a v1.2.0 -m "Release v1.2.0"
-git push origin v1.2.0
-gh release create v1.2.0 --title "Release 1.2.0" --generate-notes
-```
-
-**Warning**: Use this approach only after successfully completing at least one step-by-step release.
-
 ## Available Gradle Tasks
 
-### Version Management
+### Version Management (axion-release-plugin)
 
 ```bash
-# Show current version from gradle.properties
-./gradlew properties | grep "^version:"
+# Show current version from Git tags
+./gradlew currentVersion
 
-# Check existing Git tags
-git tag -l 'v*' --sort=-v:refname
+# Force version for build
+./gradlew build -Prelease.forceVersion=1.2.0
+
+# Create and push tag
+./gradlew createRelease -Prelease.version=1.2.0
 ```
 
-### Publishing (Per Module)
+### Publishing
 
 ```bash
-# Core library
-./gradlew :junit-jupiter-db-tester:publishToMavenLocal                       # Test locally
-./gradlew :junit-jupiter-db-tester:publishAllPublicationsToStagingRepository # Stage artifacts
+# Publish to Maven Central (all modules)
+./gradlew publishAndReleaseToMavenCentral -Prelease.forceVersion=1.2.0 --no-configuration-cache
 
-# BOM
-./gradlew :junit-jupiter-db-tester-bom:publishToMavenLocal
-./gradlew :junit-jupiter-db-tester-bom:publishAllPublicationsToStagingRepository
+# Publish to local Maven repository (for testing)
+./gradlew publishToMavenLocal -Prelease.forceVersion=1.2.0
 
-# Spring Boot Starter
-./gradlew :junit-jupiter-db-tester-spring-boot-starter:publishToMavenLocal
-./gradlew :junit-jupiter-db-tester-spring-boot-starter:publishAllPublicationsToStagingRepository
-```
-
-### JReleaser
-
-```bash
-./gradlew :junit-jupiter-db-tester:jreleaserConfig        # Show configuration
-./gradlew :junit-jupiter-db-tester:jreleaserFullRelease   # GitHub Release + Maven Central (recommended)
-./gradlew :junit-jupiter-db-tester:jreleaserRelease       # GitHub Release only
-./gradlew :junit-jupiter-db-tester:jreleaserDeploy        # Maven Central only
+# Publish to Maven Central without automatic release (manual staging)
+./gradlew publishAllPublicationsToMavenCentralRepository -Prelease.forceVersion=1.2.0 --no-configuration-cache
 ```
 
 ## Troubleshooting
@@ -328,10 +311,12 @@ git tag -l 'v*' --sort=-v:refname
 
 This error occurs when GPG cannot prompt for passphrase in non-TTY environments.
 
-**Solution**: Add GPG passphrase to `~/.gradle/gradle.properties`:
+**Solution**: Configure in-memory signing in `~/.gradle/gradle.properties`:
 
 ```properties
-signing.gnupg.passphrase=your-gpg-passphrase
+signing.keyId=ABCD1234
+signing.password=your-gpg-passphrase
+signing.secretKeyRingFile=/path/to/secring.gpg
 ```
 
 **Other GPG issues**:
@@ -354,84 +339,56 @@ gpgconf --list-dirs
 
 ```bash
 # Verify environment variables
-echo $JRELEASER_MAVENCENTRAL_SONATYPE_USERNAME
-echo $JRELEASER_GPG_PASSPHRASE
-echo $JRELEASER_GITHUB_TOKEN
+echo $ORG_GRADLE_PROJECT_mavenCentralUsername
+echo $ORG_GRADLE_PROJECT_signingInMemoryKeyId
 
 # Or check config file
-cat ~/.jreleaser/config.properties
+cat ~/.gradle/gradle.properties
 ```
 
 ### Maven Central Validation Errors
 
-JReleaser automatically validates:
+The gradle-maven-publish-plugin automatically validates:
 - GPG signatures (all `.asc` files)
-- Checksums (MD5, SHA-1, SHA-256, SHA-512)
 - Sources JAR present
 - Javadoc JAR present
 - POM completeness (name, description, URL, license, developers, SCM)
 
 If validation fails, check:
 ```bash
-# Verify staged artifacts for each module
-ls -la junit-jupiter-db-tester/build/staging-deploy/io/github/seijikohara/junit-jupiter-db-tester/
-ls -la junit-jupiter-db-tester-bom/build/staging-deploy/io/github/seijikohara/junit-jupiter-db-tester-bom/
-ls -la junit-jupiter-db-tester-spring-boot-starter/build/staging-deploy/io/github/seijikohara/junit-jupiter-db-tester-spring-boot-starter/
-
-# Check JReleaser logs
-cat junit-jupiter-db-tester/build/jreleaser/trace.log
-```
-
-### Maven Central Deployment Timeout
-
-**Warning**: "Deployment timeout exceeded. However, the remote operation may still be successful."
-
-This is normal for initial deployments, which can take 30-45 minutes. The deployment continues in the background.
-
-**Verification**:
-1. Log in to [Central Portal](https://central.sonatype.com/publishing)
-2. Check deployment status (look for "PUBLISHED" status)
-3. Wait for Maven Central replication (additional 10-30 minutes)
-
-### GitHub Release Creation Failed
-
-**Error: "403: Forbidden - Resource not accessible by personal access token"**
-
-This occurs when the GitHub token lacks necessary permissions for JReleaser to create releases.
-
-**Solution**: Ensure your GitHub Personal Access Token has the required permissions:
-- Token needs `contents: write` permission (or `repo` scope for classic tokens)
-- Create token at: https://github.com/settings/tokens
-- Update `JRELEASER_GITHUB_TOKEN` in `~/.jreleaser/config.properties`
-
-**Workaround** (if token permissions cannot be updated):
-Use `gh` CLI to create releases instead of `jreleaserFullRelease`:
-```bash
-# Deploy to Maven Central only
-./gradlew :junit-jupiter-db-tester:jreleaserDeploy --no-configuration-cache
-
-# Create GitHub Release manually
-gh release create v1.0.0 \
-  --title "v1.0.0" \
-  --notes-file junit-jupiter-db-tester/build/jreleaser/release/CHANGELOG.md
+# Check build output for errors
+./gradlew publishToMavenLocal -Prelease.forceVersion=1.2.0 --info
 ```
 
 ### Configuration Cache Issues
 
-Always use `--no-configuration-cache` with JReleaser tasks due to compatibility:
+Always use `--no-configuration-cache` with publishing tasks:
 
 ```bash
 # Correct
-./gradlew :junit-jupiter-db-tester:jreleaserFullRelease --no-configuration-cache
+./gradlew publishAndReleaseToMavenCentral -Prelease.forceVersion=1.2.0 --no-configuration-cache
 
-# Incorrect (will fail)
-./gradlew :junit-jupiter-db-tester:jreleaserFullRelease
+# May have issues
+./gradlew publishAndReleaseToMavenCentral -Prelease.forceVersion=1.2.0
+```
+
+### Version Issues
+
+```bash
+# Check current version
+./gradlew currentVersion
+
+# Fetch all tags if out of sync
+git fetch --tags
+
+# List tags
+git tag -l 'v*' --sort=-v:refname
 ```
 
 ## Best Practices
 
 1. **Test Locally First**: Always use `publishToMavenLocal` before releasing
-2. **Use Dry Run**: Test with `--dry-run` for first-time releases
+2. **Use Dry Run**: Test with GitHub Actions dry-run mode for first-time releases
 3. **Verify Namespace**: Ensure namespace is verified in Central Portal before releasing
 4. **Backup GPG Keys**: Store GPG keys securely (export and backup)
 5. **Document Credentials**: Keep credential locations documented for team members
@@ -440,7 +397,7 @@ Always use `--no-configuration-cache` with JReleaser tasks due to compatibility:
 
 ## References
 
+- [axion-release-plugin Documentation](https://axion-release-plugin.readthedocs.io/)
+- [gradle-maven-publish-plugin Documentation](https://vanniktech.github.io/gradle-maven-publish-plugin/)
 - [Central Portal Documentation](https://central.sonatype.org/)
-- [JReleaser Documentation](https://jreleaser.org/guide/latest/)
-- [JReleaser Maven Central Guide](https://jreleaser.org/guide/latest/reference/deploy/maven/maven-central.html)
 - [Maven Central Requirements](https://central.sonatype.org/publish/requirements/)

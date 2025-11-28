@@ -1,8 +1,10 @@
+import com.vanniktech.maven.publish.JavaLibrary
+import com.vanniktech.maven.publish.JavadocJar
+
 plugins {
     `java-library`
-    `maven-publish`
-    signing
     jacoco
+    alias(libs.plugins.maven.publish)
 }
 
 dependencies {
@@ -17,11 +19,6 @@ dependencies {
     // Implementation dependencies not exposed to consumers
     implementation(libs.dbunit)
     implementation(libs.slf4j.api)
-}
-
-java {
-    withSourcesJar()
-    withJavadocJar()
 }
 
 // Configure test suites using Gradle's testing DSL (Gradle 7.3+)
@@ -86,19 +83,14 @@ tasks {
     }
 }
 
-publishing {
-    publications {
-        create<MavenPublication>("mavenJava") {
-            from(components["java"])
+mavenPublishing {
+    configure(JavaLibrary(
+        javadocJar = JavadocJar.Javadoc(),
+        sourcesJar = true
+    ))
 
-            pom {
-                name = "JUnit Jupiter DB Tester"
-                description = "A JUnit Jupiter extension for database testing with CSV-based test data management, built on DbUnit"
-            }
-        }
+    pom {
+        name = "JUnit Jupiter DB Tester"
+        description = "A JUnit Jupiter extension for database testing with CSV-based test data management, built on DbUnit"
     }
-}
-
-signing {
-    sign(publishing.publications["mavenJava"])
 }
