@@ -1,27 +1,14 @@
 import com.diffplug.gradle.spotless.SpotlessExtension
+import com.vanniktech.maven.publish.MavenPublishBaseExtension
 import net.ltgt.gradle.errorprone.CheckSeverity
 import net.ltgt.gradle.errorprone.errorprone
-
-// Force JGit version to 5.13.x for JReleaser compatibility
-// JReleaser 1.21.0 requires JGit 5.13.x API (GpgObjectSigner class)
-// which was removed in JGit 7.0.0 (API breaking change)
-// Spotless plugin also depends on JGit but with newer version 7.4.x
-buildscript {
-    configurations.all {
-        resolutionStrategy.eachDependency {
-            if (requested.group == "org.eclipse.jgit") {
-                useVersion("5.13.3.202401111512-r")
-                because("JReleaser 1.21.0 requires JGit 5.13.x API")
-            }
-        }
-    }
-}
 
 plugins {
     // Apply plugins to subprojects using `apply false` and then apply them explicitly in subprojects
     // This approach is required because plugins block cannot be used within subprojects/allprojects blocks
+    alias(libs.plugins.axion.release)
     alias(libs.plugins.errorprone) apply false
-    alias(libs.plugins.jreleaser)
+    alias(libs.plugins.maven.publish) apply false
     alias(libs.plugins.spotless)
     // Version Catalog Update plugin for managing dependency versions
     alias(libs.plugins.version.catalog.update)
@@ -29,9 +16,39 @@ plugins {
 
 group = "io.github.seijikohara"
 
-// Version is managed via gradle.properties file
-// For releases, GitHub Actions workflow or command line overrides the version:
-//   ./gradlew build -Pversion=1.0.0
+// Configure version management with axion-release-plugin
+// Version is derived from Git tags (e.g., v1.2.0 -> 1.2.0)
+scmVersion {
+    // Use semantic versioning - always use the highest version from tags
+    useHighestVersion = true
+
+    // Tag configuration
+    tag {
+        // Tag prefix (e.g., v1.0.0)
+        prefix = "v"
+        // No separator between prefix and version
+        versionSeparator = ""
+    }
+
+    // Use simple version without branch name suffix
+    versionCreator("simple")
+
+    // Repository configuration
+    repository {
+        // Push tags only (not commits)
+        pushTagsOnly = true
+    }
+
+    // Checks before release
+    checks {
+        // Allow uncommitted changes during CI builds
+        uncommittedChanges = false
+        // Allow release even if not ahead of remote
+        aheadOfRemote = false
+    }
+}
+
+version = scmVersion.version
 
 // Configure version catalog update plugin
 versionCatalogUpdate {
@@ -50,6 +67,42 @@ spotless {
 allprojects {
     group = rootProject.group
     version = rootProject.version
+}
+
+// Common POM configuration for published modules
+subprojects {
+    pluginManager.withPlugin("com.vanniktech.maven.publish") {
+        extensions.configure<MavenPublishBaseExtension> {
+            publishToMavenCentral()
+            signAllPublications()
+
+            pom {
+                url = "https://github.com/seijikohara/junit-jupiter-db-tester"
+                inceptionYear = "2024"
+
+                licenses {
+                    license {
+                        name = "MIT License"
+                        url = "https://opensource.org/licenses/MIT"
+                    }
+                }
+
+                developers {
+                    developer {
+                        id = "seijikohara"
+                        name = "Seiji Kohara"
+                        email = "seiji.kohara@gmail.com"
+                    }
+                }
+
+                scm {
+                    connection = "scm:git:git://github.com/seijikohara/junit-jupiter-db-tester.git"
+                    developerConnection = "scm:git:ssh://github.com/seijikohara/junit-jupiter-db-tester.git"
+                    url = "https://github.com/seijikohara/junit-jupiter-db-tester"
+                }
+            }
+        }
+    }
 }
 
 // Java subprojects configuration (excludes BOM which uses java-platform plugin)
@@ -117,63 +170,4 @@ subprojects {
             option("NullAway:HandleTestAssertionLibraries", "true")
         }
     }
-}
-
-// Common Maven publishing configuration for all subprojects with maven-publish plugin
-subprojects {
-    plugins.withType<MavenPublishPlugin> {
-        configure<PublishingExtension> {
-            publications.withType<MavenPublication> {
-                pom {
-                    url = "https://github.com/seijikohara/junit-jupiter-db-tester"
-
-                    licenses {
-                        license {
-                            name = "MIT License"
-                            url = "https://opensource.org/licenses/MIT"
-                        }
-                    }
-
-                    developers {
-                        developer {
-                            id = "seijikohara"
-                            name = "Seiji Kohara"
-                            email = "seiji.kohara@gmail.com"
-                        }
-                    }
-
-                    scm {
-                        connection = "scm:git:git://github.com/seijikohara/junit-jupiter-db-tester.git"
-                        developerConnection = "scm:git:ssh://github.com/seijikohara/junit-jupiter-db-tester.git"
-                        url = "https://github.com/seijikohara/junit-jupiter-db-tester"
-                    }
-                }
-            }
-
-            repositories {
-                maven {
-                    name = "staging"
-                    url =
-                        layout.buildDirectory
-                            .dir("staging-deploy")
-                            .get()
-                            .asFile
-                            .toURI()
-                }
-            }
-        }
-    }
-
-    plugins.withType<SigningPlugin> {
-        configure<SigningExtension> {
-            setRequired { gradle.taskGraph.allTasks.any { it.name.contains("publish") } }
-            useGpgCmd()
-        }
-    }
-}
-
-// JReleaser configuration for Maven Central deployment
-jreleaser {
-    gitRootSearch = true
-    configFile = file("jreleaser.yml")
 }

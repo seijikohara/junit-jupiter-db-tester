@@ -19,6 +19,23 @@ All modules share the same version and are released together:
 | [junit-jupiter-db-tester-bom](../junit-jupiter-db-tester-bom/) | Bill of Materials |
 | [junit-jupiter-db-tester-spring-boot-starter](../junit-jupiter-db-tester-spring-boot-starter/) | Spring Boot Starter |
 
+### Version Management
+
+This project uses [axion-release-plugin](https://github.com/allegro/axion-release-plugin) for version management. Versions are derived from Git tags:
+
+- **Tagged commit** (e.g., `v1.2.0`): Release version `1.2.0`
+- **After tagged commit**: Snapshot version `1.2.1-SNAPSHOT`
+- **No tags**: Default version `0.1.0-SNAPSHOT`
+
+```bash
+# Check current version
+./gradlew currentVersion
+
+# Example outputs:
+# On tagged commit v1.2.0 → 1.2.0
+# After v1.2.0 tag → 1.2.1-SNAPSHOT
+```
+
 ---
 
 ## Option 1: GitHub Actions Release (Recommended)
@@ -33,7 +50,7 @@ The GitHub Actions workflow provides:
 
 See [PUBLISHING.md](PUBLISHING.md) for one-time setup:
 - GitHub Environment (`maven-central`) with required reviewers
-- GitHub Secrets (`GPG_PRIVATE_KEY`, `GPG_PASSPHRASE`, `MAVEN_CENTRAL_USERNAME`, `MAVEN_CENTRAL_TOKEN`)
+- GitHub Secrets (`GPG_PRIVATE_KEY`, `GPG_PASSPHRASE`, `GPG_KEY_ID`, `MAVEN_CENTRAL_USERNAME`, `MAVEN_CENTRAL_TOKEN`)
 
 ### Release Process
 
@@ -48,7 +65,6 @@ This runs:
 - Version format validation
 - Check that version is newer than existing tags
 - Build and test all modules
-- JReleaser dry-run (no actual deployment)
 
 **Step 2: Actual Release**
 
@@ -62,7 +78,7 @@ This runs:
 
 **Operations Performed:**
 - Deploy all modules to Maven Central
-- Create Git tag (`v1.2.0`)
+- Create Git tag (`v1.2.0`) via axion-release-plugin
 - Create GitHub Release with auto-generated release notes
 
 ### Verify Release
@@ -85,84 +101,60 @@ See [PUBLISHING.md](PUBLISHING.md) for detailed setup instructions:
 - Central Portal account and namespace verification
 - API token generation
 - GPG key setup
-- Credential configuration
-  - **Required**: `~/.gradle/gradle.properties` with `signing.gnupg.passphrase`
-  - **Required**: `~/.jreleaser/config.properties` with Maven Central and GitHub credentials
-
-### Version Management
-
-#### How Versioning Works
-
-The project version is managed via `gradle.properties`:
-
-- **Development**: Default version is `0.1.0-SNAPSHOT`
-- **Release**: Version is specified explicitly via command line (`-Pversion=1.0.0`) or GitHub Actions workflow
-
-#### Check Current Version
-
-```bash
-# View version in gradle.properties
-cat gradle.properties | grep version
-
-# Or check via Gradle
-./gradlew properties | grep "^version:"
-```
+- Credential configuration in `~/.gradle/gradle.properties`
 
 ### Local Release Process
 
-**Step 1: Determine Release Version**
-
-Check existing tags and determine the next version:
+**Step 1: Check Current Version**
 
 ```bash
+# View current version (derived from Git tags)
+./gradlew currentVersion
+
 # List existing tags
 git tag -l 'v*' --sort=-v:refname
-
-# Determine next version based on semantic versioning:
-# - PATCH (1.0.0 -> 1.0.1): Bug fixes
-# - MINOR (1.0.0 -> 1.1.0): New features (backward compatible)
-# - MAJOR (1.0.0 -> 2.0.0): Breaking changes
 ```
 
-**Step 2: Build and Stage All Modules**
+**Step 2: Build and Test**
 
 Build with the release version (replace `1.2.0` with your target version):
 
 ```bash
-./gradlew clean build publish -Pversion=1.2.0 --no-configuration-cache
+./gradlew clean build -Prelease.forceVersion=1.2.0
 ```
 
-This generates for each module:
-- Main JAR (or POM for BOM)
-- Sources JAR (except BOM)
-- Javadoc JAR (except BOM)
-- POM file
-- GPG signatures (`.asc` files)
-
-Artifacts are staged in each module's `build/staging-deploy/` directory.
-
-**Step 3: Deploy to Maven Central**
+**Step 3: Publish to Maven Central**
 
 ```bash
-./gradlew jreleaserDeploy -Pversion=1.2.0 --no-configuration-cache
+./gradlew publishAndReleaseToMavenCentral -Prelease.forceVersion=1.2.0 --no-configuration-cache
 ```
 
-This uploads signed artifacts from all modules to Maven Central.
+This uploads signed artifacts from all modules to Maven Central and automatically releases them.
 
-**Note**: This can take 30-45 minutes for the deployment validation and publishing.
+**Note**: This can take several minutes for the deployment validation and publishing.
 
-**Step 4: Create Git Tag and GitHub Release**
+**Step 4: Create Git Tag**
+
+Use axion-release-plugin to create and push the tag:
 
 ```bash
-# Create and push tag
+./gradlew createRelease -Prelease.version=1.2.0
+```
+
+Or manually:
+
+```bash
 git tag -a v1.2.0 -m "Release v1.2.0"
 git push origin v1.2.0
+```
 
-# Create GitHub Release (using gh CLI)
+**Step 5: Create GitHub Release**
+
+```bash
 gh release create v1.2.0 --title "Release 1.2.0" --generate-notes
 ```
 
-**Step 5: Verify Release**
+**Step 6: Verify Release**
 
 **GitHub Release** (immediate):
 - Visit: `https://github.com/seijikohara/junit-jupiter-db-tester/releases`
@@ -184,21 +176,15 @@ dependencies {
 }
 ```
 
-#### Dry Run (Testing)
-
-Test the release process without actually deploying:
-
-```bash
-./gradlew jreleaserDeploy -Pversion=1.2.0 --dryrun --no-configuration-cache
-```
-
 ---
 
 ## Changelog Generation
 
-JReleaser automatically generates changelogs based on **Conventional Commits**.
+GitHub Release automatically generates changelogs based on merged PRs and commit history.
 
 ### Commit Message Format
+
+Use **Conventional Commits** for better changelog organization:
 
 ```
 <type>[optional scope]: <description>
@@ -240,49 +226,24 @@ Version is determined manually following [Semantic Versioning](https://semver.or
 - **MINOR** (1.0.0 → 1.1.0): New features (backward compatible)
 - **MAJOR** (1.0.0 → 2.0.0): Breaking changes
 
-### Pre-release Versions
-
-For pre-release versions, use appropriate suffixes:
-
-```bash
-# Beta release
-./gradlew clean build publish -Pversion=1.0.0-beta.1
-
-# Release candidate
-./gradlew clean build publish -Pversion=1.0.0-rc.1
-```
-
 ## Available Gradle Tasks
 
-### Version Check
+### Version Management (axion-release-plugin)
 
 ```bash
-./gradlew properties | grep "^version:"    # Show current version
+./gradlew currentVersion                              # Show current version
+./gradlew currentVersion -Prelease.forceVersion=1.2.0 # Show forced version
+./gradlew createRelease -Prelease.version=1.2.0       # Create and push tag
 ```
 
-### Publishing (Per Module)
+### Publishing
 
 ```bash
-# Core library
-./gradlew :junit-jupiter-db-tester:publishToMavenLocal                       # Test locally
-./gradlew :junit-jupiter-db-tester:publishAllPublicationsToStagingRepository # Stage artifacts
+# Publish to Maven Central (all modules)
+./gradlew publishAndReleaseToMavenCentral -Prelease.forceVersion=1.2.0 --no-configuration-cache
 
-# BOM
-./gradlew :junit-jupiter-db-tester-bom:publishToMavenLocal
-./gradlew :junit-jupiter-db-tester-bom:publishAllPublicationsToStagingRepository
-
-# Spring Boot Starter
-./gradlew :junit-jupiter-db-tester-spring-boot-starter:publishToMavenLocal
-./gradlew :junit-jupiter-db-tester-spring-boot-starter:publishAllPublicationsToStagingRepository
-```
-
-### JReleaser
-
-```bash
-./gradlew :junit-jupiter-db-tester:jreleaserConfig        # Show configuration
-./gradlew :junit-jupiter-db-tester:jreleaserFullRelease   # GitHub Release + Maven Central (recommended)
-./gradlew :junit-jupiter-db-tester:jreleaserRelease       # GitHub Release only
-./gradlew :junit-jupiter-db-tester:jreleaserDeploy        # Maven Central only
+# Publish to local Maven repository (for testing)
+./gradlew publishToMavenLocal -Prelease.forceVersion=1.2.0
 ```
 
 ## Troubleshooting
@@ -290,14 +251,14 @@ For pre-release versions, use appropriate suffixes:
 ### Version Issues
 
 ```bash
-# Check Git tags
-git tag -l 'v*' --sort=-v:refname
+# Check current version from Git tags
+./gradlew currentVersion
 
 # Fetch all tags if out of sync
 git fetch --tags
 
-# Check current version in gradle.properties
-cat gradle.properties | grep version
+# List tags
+git tag -l 'v*' --sort=-v:refname
 ```
 
 ### GPG Signing Errors
@@ -306,65 +267,37 @@ cat gradle.properties | grep version
 
 This error occurs when GPG cannot prompt for passphrase in non-TTY environments.
 
-**Solution**: Add GPG passphrase to `~/.gradle/gradle.properties`:
+**Solution**: Configure in-memory signing in `~/.gradle/gradle.properties`:
 
 ```properties
-signing.gnupg.passphrase=your-gpg-passphrase
+signing.keyId=YOUR_KEY_ID
+signing.password=YOUR_GPG_PASSPHRASE
+signing.secretKeyRingFile=/path/to/secring.gpg
 ```
 
-### GitHub Release Failed
-
-**Error: "403: Forbidden - Resource not accessible by personal access token"**
-
-This occurs when the GitHub token lacks necessary permissions for JReleaser to create releases.
-
-**Solution**: Ensure your GitHub Personal Access Token has the required permissions:
-- Token needs `contents: write` permission (or `repo` scope for classic tokens)
-- Create token at: https://github.com/settings/tokens
-- Update `JRELEASER_GITHUB_TOKEN` in `~/.jreleaser/config.properties`
-
-**Workaround** (if token permissions cannot be updated):
-Use `gh` CLI to create releases instead of `jreleaserFullRelease`:
+Or use environment variables for CI:
 ```bash
-# Deploy to Maven Central only
-./gradlew :junit-jupiter-db-tester:jreleaserDeploy --no-configuration-cache
-
-# Create GitHub Release manually
-gh release create v1.0.0 \
-  --title "v1.0.0" \
-  --notes-file junit-jupiter-db-tester/build/jreleaser/release/CHANGELOG.md
+export ORG_GRADLE_PROJECT_signingInMemoryKeyId=YOUR_KEY_ID
+export ORG_GRADLE_PROJECT_signingInMemoryKeyPassword=YOUR_PASSPHRASE
+export ORG_GRADLE_PROJECT_signingInMemoryKey="$(gpg --armor --export-secret-keys YOUR_KEY_ID)"
 ```
-
-### Maven Central Deployment Timeout
-
-**Warning**: "Deployment timeout exceeded. However, the remote operation may still be successful."
-
-This is normal for initial deployments, which can take 30-45 minutes. The deployment continues in the background.
-
-**Verification**:
-1. Log in to [Central Portal](https://central.sonatype.com/publishing)
-2. Check deployment status (look for "PUBLISHED" status)
-3. Wait for Maven Central replication (additional 10-30 minutes)
 
 ### Maven Central Deployment Failed
 
-- Check credentials in `~/.jreleaser/config.properties`
-- Verify GPG key is available: `gpg --list-keys`
-- Check staging repositories:
-  ```bash
-  ls -la junit-jupiter-db-tester/build/staging-deploy/
-  ls -la junit-jupiter-db-tester-bom/build/staging-deploy/
-  ls -la junit-jupiter-db-tester-spring-boot-starter/build/staging-deploy/
+- Check credentials in `~/.gradle/gradle.properties`:
+  ```properties
+  mavenCentralUsername=YOUR_USERNAME
+  mavenCentralPassword=YOUR_TOKEN
   ```
-- Review JReleaser logs: `junit-jupiter-db-tester/build/jreleaser/trace.log`
+- Verify GPG key is available: `gpg --list-keys`
 
 For detailed troubleshooting, see [PUBLISHING.md](PUBLISHING.md).
 
 ## Best Practices
 
 1. **Use Conventional Commits** for automatic changelog generation
-2. **Test locally first** using `publishToMavenLocal` and `--dry-run`
-3. **Create pre-release versions** for testing before major releases
+2. **Test locally first** using `publishToMavenLocal`
+3. **Use dry-run mode** in GitHub Actions before actual release
 4. **Keep main branch clean** - avoid force pushes after tagging
 5. **Document breaking changes** in commit messages and release notes
 6. **Verify releases** on GitHub and Maven Central after publishing
@@ -375,19 +308,17 @@ For detailed troubleshooting, see [PUBLISHING.md](PUBLISHING.md).
 # 1. Ensure all tests pass
 ./gradlew clean build test
 
-# 2. Check existing tags and determine next version
+# 2. Check current version and existing tags
+./gradlew currentVersion
 git tag -l 'v*' --sort=-v:refname | head -5
-# Determine version based on changes (PATCH/MINOR/MAJOR)
 
-# 3. Build and publish all modules to staging (replace 1.2.0 with your version)
-./gradlew clean build publish -Pversion=1.2.0 --no-configuration-cache
+# 3. Publish to Maven Central (replace 1.2.0 with your version)
+./gradlew publishAndReleaseToMavenCentral -Prelease.forceVersion=1.2.0 --no-configuration-cache
 
-# 4. Deploy to Maven Central
-./gradlew jreleaserDeploy -Pversion=1.2.0 --no-configuration-cache
+# 4. Create Git tag
+./gradlew createRelease -Prelease.version=1.2.0
 
-# 5. Create Git tag and GitHub Release
-git tag -a v1.2.0 -m "Release v1.2.0"
-git push origin v1.2.0
+# 5. Create GitHub Release
 gh release create v1.2.0 --title "Release 1.2.0" --generate-notes
 
 # 6. Verify on GitHub and Maven Central
@@ -399,6 +330,7 @@ gh release create v1.2.0 --title "Release 1.2.0" --generate-notes
 
 ## References
 
-- [JReleaser Documentation](https://jreleaser.org/)
+- [axion-release-plugin Documentation](https://axion-release-plugin.readthedocs.io/)
+- [gradle-maven-publish-plugin Documentation](https://vanniktech.github.io/gradle-maven-publish-plugin/)
 - [Conventional Commits](https://www.conventionalcommits.org/)
 - [Semantic Versioning](https://semver.org/)
