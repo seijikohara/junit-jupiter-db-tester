@@ -203,10 +203,20 @@ jobs:
       url: https://central.sonatype.com/artifact/io.github.seijikohara/junit-jupiter-db-tester
 
     steps:
+      - name: Generate GitHub App Token
+        id: generate_token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.DEV_AUTOMATION_APP_ID }}
+          private-key: ${{ secrets.DEV_AUTOMATION_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
           fetch-depth: 0  # Required for axion-release-plugin
+          token: ${{ steps.generate_token.outputs.token }}
 
       - name: Set up JDK ${{ env.JAVA_VERSION }}
         uses: actions/setup-java@v5
@@ -245,6 +255,7 @@ jobs:
           generate_release_notes: true
           draft: false
           prerelease: false
+          token: ${{ steps.generate_token.outputs.token }}
 
       - name: Release summary
         run: |
